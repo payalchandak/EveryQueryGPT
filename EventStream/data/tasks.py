@@ -5,12 +5,13 @@ from typing import Any
 
 import hydra
 import inflect
+
 inflect = inflect.engine()
+import polars as pl
 from omegaconf import DictConfig, OmegaConf
 
-import polars as pl
-
 from .dataset_polars import Dataset
+
 
 @dataclasses.dataclass
 class TaskConfig:
@@ -18,6 +19,7 @@ class TaskConfig:
 
     def merge(self, other: TaskConfig) -> "TaskConfig":
         raise NotImplementedError
+
 
 def parse_task_cfg(task_cfg: DictConfig) -> dict[str, TaskConfig] | TaskConfig:
     task_fields = {f.name for f in dataclasses.fields(TaskConfig)}
@@ -33,13 +35,13 @@ def parse_task_cfg(task_cfg: DictConfig) -> dict[str, TaskConfig] | TaskConfig:
         v = parse_task_cfg(v)
         match v:
             case dict():
-                for k2, v2 in v.items(): out[f"{k}/{k2}"] = base_task_config.merge(v2)
+                for k2, v2 in v.items():
+                    out[f"{k}/{k2}"] = base_task_config.merge(v2)
             case TaskConfig():
                 out[k] = base_task_config.merge(v)
             case _:
                 raise ValueError(f"Invalid task config: {v}")
     return out
-
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="task_base")
@@ -65,8 +67,6 @@ def main(cfg: DictConfig):
         task_fp.parent.mkdir(exist_ok=True, parents=True)
 
         task_df.to_parquet(task_fp)
-
-
 
     # 1. Build measurement_configs and track input schemas
     subject_id_col = cfg.pop("subject_id_col")
