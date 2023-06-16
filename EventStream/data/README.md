@@ -1,15 +1,33 @@
-# EventStreamData
-
-The `EventStreamData` module contains code for representing and using Event-stream datasets, designed for
+The `EventStream.data` module contains code for representing and using Event-stream datasets, designed for
 three applications, in priority order:
-1\. For use in generative point-processes / generative sequence models in PyTorch using
-`EventStreamTransformer`.
-2\. For general PyTorch deep-learning applications and models.
-3\. For general modeling and data analysis.
+
+1. For use in generative point-processes / generative sequence models in PyTorch using
+   `EventStream.transformer`
+2. For general PyTorch deep-learning applications and models.
+3. For general modeling and data analysis.
 
 There are several classes and functions in this module that may be useful, which we document below.
 
-## Overall Data Model
+### Overall Data Model
+
+The overall data model for the Event Stream GPT package is shown visually below:
+
+![Overall Data Model](https://github.com/mmcdermott/EventStreamGPT/assets/470751/76669316-8560-4ee7-b0ac-d52e886e089f)
+**Figure:** Event Stream GPT's end-to-end data pipeline, which spans raw data extraction from source all the
+way to production of a PyTorch dataset and pre-built embedder suitable for use in any deep learning pipeline.
+**(a)** An example of our data modality; for a single subject $\vec S_1$, the data consists of a series of
+events at continuous timestamps $\vec e_1, \vec e_2, \ldots$ (such as medical visits), with each event being
+composed of inter-related internal covariate measurements $\vec m_1, \vec m_2, \ldots$ (such as laboratory
+test results, medication perscripts, infusions, etc.).
+**(b)** These data elements can be distributed among many input data sources in raw form. From a simple YAML
+configuration file, \\pkgAbbr can extract these data elements from source and compile them into an internal
+data model consisting of three key dataframes: `subjects_df` for static data, `events_df` containing event
+timestamps and types per subject, and `dynamic_measurements_df`, storing all observed measurements.
+**(c)** ESGPT pre-processes these data-frames across several critical axes, doing so efficiently through the
+use of the Polars library.
+**(d)** ESGPT produces a PyTorch dataset which yields batches whose size scales with the number of observed
+data element per event, not with the input vocabulary size.
+**(e)** ESGPT provides a default embedding layer capable of embedding these sparse batches efficiently.
 
 We assume any "event stream dataset" consists of 3 fundamental data units:
 
@@ -23,23 +41,19 @@ We assume any "event stream dataset" consists of 3 fundamental data units:
    a measurement can only take on a single value per event. Measurements are characterized by many
    properties and can be pre-processed automatically by the system in several ways.
 
-This data model is realized explicitly in the internal structure of the `EventStreamDataset` class,
-documented below. Note that there is both an `EventStreamDatasetBase` class which contains pre-processing
-logic that does not rely on the internal data representation library, and specific `EventStreamDataset`
+This data model is realized explicitly in the internal structure of the `EventStream.data.Dataset` class,
+documented below. Note that there is both an
+[`EventStream.data.DatasetBase`](EventStream/data/dataset_base.py) class which contains pre-processing logic
+that does not rely on the internal data representation library, and specific `EventStream.data.Dataset`
 classes for different internal data representation libraries. For now, this solely includes
-`event_stream_dataset_polars.py`, which uses the library `Polars` as its internal library. As we scale to
-larger dataset sizes, we plan to also extend to `event_stream_dataset_pyspark.py` and may also implement an
-`event_stream_dataset_pandas.py` file for backwards compatibility, even though `polars` is significantly
-faster in all tested settings currently.
+[`dataset_polars.py`](EventStream/data/dataset_polars.py), which uses the library `Polars` as its internal
+library.
 
-Note that currently, at some places in the code, measurements are referred to as `metadata` --- this will be
-removed eventually. TODO(mmd): Fully switch over the name.
-
-The `EventStreamDataset` class also can produce fully cached deep-learning friendly dataframes for its various
-splits and store these to files. These are then used with the associated `EventStreamPytorchDataset` classes
-for deep learning applications, where the representations can be translated to pytorch embedding to one in
-which data are presented to models in a sparse, fully-temporally realized format which should be more
-efficient computationally than a dense format and based on
+The `EventStream.data.Dataset` class also can produce fully cached deep-learning friendly dataframes for its
+various splits and store these to files. These are then used with the associated
+`EventStream.data.PytorchDataset` classes for deep learning applications, where the representations can be
+translated to pytorch embedding to one in which data are presented to models in a sparse, fully-temporally
+realized format which should be more efficient computationally than a dense format and based on
 [existing literature](https://arxiv.org/abs/2106.11959) is likely to be a high-performance style of data
 embedding overall (at least with respect to the per-timestamp data embedding practices).
 
@@ -65,14 +79,14 @@ the following data:
    `np.NaN`, depending on the data library format) or may have been filtered out as outliers (reflected with
    `np.NaN`).
 
-## Measurements
+### Measurements
 
 Measurements are identified uniquely by a single column name or, in the context of a multivariate regression
 measurement, by a pair of column names defining the keys and values, respectively. Ultimately, these names
 are linked to columns in various internal dataframes. Measurements can be broken down into several categories
 along different axes:
 
-### Temporality
+#### Temporality
 
 As stated above, measurements can take on one of the following three modes relating to how they vary in time:
 
@@ -83,7 +97,7 @@ As stated above, measurements can take on one of the following three modes relat
    static functional form as in the case of `FUNCTIONAL_TIME_DEPENDENT`. Accordingly, these measurements are
    linked to events in a many to one fashion and are identified via a separate, `metadata_id` identifier.
 
-### Measurement Observation Data Modality
+#### Measurement Observation Data Modality
 
 Measurements can also vary in what modality (e.g., continuous/numeric valued, categorical, etc.) their
 observations are. These definitions of modality are both motivated by three things:
@@ -127,17 +141,17 @@ the pre-processing of those values:
 4. `CATEGORICAL_FLOAT`: the observed values will be normalized into a set of categories on the basis of the
    values observed.
 
-### Configuration: `MeasurementConfig`
+#### Configuration: `MeasurementConfig`
 
 Measurements can be configured via the `MeasurementConfig` object (inside `config.py`). At initialization,
-this configuration object defines the metrics an `EventStreamDataset` object should pre-process for modelling
+this configuration object defines the metrics an `EventStream.data.Dataset` object should pre-process for modelling
 use, but it also is filled during pre-processing with information about that measurement in the data.
 
 A subset of notable fields include:
 
 1. `MeasurementConfig.name`: contains the name of the measurement, and links to columns in the data. This
    does not need to be set manually in practice; it will be filled on the basis of how the measurement config
-   is stored inside the broader `EventStreamDatasetConfig`.
+   is stored inside the broader `EventStream.data.DatasetConfig`.
 2. `modality` tracks the observation modalities discussed above, and `temporality` the temporality modes
    discussed above. Both use `StrEnum`s for storage, which means in practice either their enum forms (e.g.,
    `DataModality.UNIVARIATE_REGRESSION`) or lowercase strings of the enum variable name (e.g.,
@@ -162,23 +176,19 @@ A subset of notable fields include:
    stored, and vocabularies can be filtered to only elements occurring sufficiently frequently via a
    function and "idxmaps" (maps from vocabulary elements to their integer index) are also available via an
    accessor. These can be built from observations during pre-processing dynamically.
-6. `present_in_event_types` stores which for which types of events this measurement can be observed. This is
-   only valid for `DYNAMIC` measurements, as `STATIC` measurements are not associated with events and
-   `FUNCTIONAL_TIME_DEPENDENT` measurements are only dependent on timestamps among event variables, so can
-   exist for all events.
-7. `observation_frequency` stores how frequently that measurement was observed with a non-null value (or a
+6. `observation_frequency` stores how frequently that measurement was observed with a non-null value (or a
    non-null key in the case of `MULTIVARIATE_REGRESSION` measurements) among all possible instances it could
    have been observed (e.g., all possible subjects for `STATIC` measurements, or otherwise all possible
-   events of the valid type).
+   events).
 
 This configuration file is readable from and writable to JSON files. Full details of the options for this
 configuration object can be found in its source documentation.
 
-## `EventStreamDataset`
+### `EventStream.data.Dataset`
 
 This class stores an event stream dataset and performs pre-processing as dictated by a configuration object.
 
-### Configuration via `EventStreamDatasetConfig`
+#### Configuration via `EventStream.data.DatasetConfig`
 
 This configuration object stores three classes of parameters:
 
@@ -189,42 +199,47 @@ This configuration object stores three classes of parameters:
    value conversion parameters, etc.
 3. Two dictionaries thad define what class should be used and how that class should be parametrized for
    performing outlier detection and normalization. These configuration dictionaries, if specified, must
-   contain a `'cls'` key _which further must link to an option in the `EventStreamDataset.METADATA_MODELS`
+   contain a `'cls'` key _which further must link to an option in the `EventStream.data.Dataset.METADATA_MODELS`
    class dictionary_.
 
 This configuration file is readable from and writable to JSON files. Full details of the options for this
 configuration object can be found in its source documentation.
 
-### Construction
+#### Construction
 
-One can construct an `EventStreamDataset` by passing a configuration object and a `subjects_df`, an
+One can construct an `EventStream.data.Dataset` by passing a configuration object and a `subjects_df`, an
 `events_df`, and a `measurements_df`. There are several mandatory columns for each dataframe, which can be
 found in the source documentation.
 
-### Saving / Loading
+Alternatively, one can leverage the
+[`scripts/build\_dataset.py`](https://github.com/mmcdermott/EventStreamGPT/blob/main/scripts/build_dataset.pyI)
+to extract a raw dataset and build it from the undrerlying data source.
 
-`EventStreamDatasets` can be efficiently saved and loaded to disk via the instance method `_save` and class
-method `_load`, both of which use a `pathlib.Path` object pointing to a directory in which the dataset should
-be saved / loaded. For `_save`, this directory is not passed as a parameter, but is specified in the
+#### Saving / Loading
+
+`EventStream.data.Dataset`s can be efficiently saved and loaded to disk via the instance method `save` and
+class method `load`, both of which use a `pathlib.Path` object pointing to a directory in which the dataset
+should be saved / loaded. For `save`, this directory is not passed as a parameter, but is specified in the
 configuration object for the instance. For loading, it is passed as a parameter to the function. For saving
 (loading) the dataset will write (read) a number of files and subdirectories to (from)
 that passed directory. Dataframes are stored in a user-specifiable format via a class variable, but for the
-only current `EventStreamDataset` class, the `Polars` version, we recommend using the `parquet` format and it
-is the only format supported out of the box. The `EventStreamDataset` also saves a vocabulary configuration
-object to JSON and stores its other attributes via a pickled file produced via `dill`. We plan to further
-specialize the saving logic to write the internal `config` object to a JSON file instead and to write the fit
-measurement information to disk in a more translatable format as well. `_save` should only be called after the
-model has been fit. `_save` does not store the deep-learning representation at present; this needs to be saved
-separately via `cache_deep_learning_representation`. `_load`, upon calling, will not load the transformed
-dataframes, as those may not be needed if the user only wants to inspect the configuration objects. This
-allows the loading to be very fast, and the dataframes are instead lazily loaded upon first access by the
-user.
+only current `EventStream.data.Dataset` class, the `Polars` version, we recommend using the `parquet` format
+and it is the only format supported out of the box. The `EventStream.data.Dataset` also saves a vocabulary
+configuration object to JSON and stores its other attributes via a pickled file produced via `dill`.
 
-### Pre-processing Data Capabilities
+Upon saving, the `Dataset` object will write a number of files to disk, including a JSON version of the
+internal `config` object, separate files for each of the three internal dataframes (`subjects_df`,
+`events_df`, and `dynamic_measurements_df`), and a separate file for the inferred, pre-processed measurement
+configuration objects, in JSON format. Depending on the measurements in question, there may be further files
+written to disk containing data-frame versions of the pre-processed, key-specific measurement metadata (e.g.,
+inferred outlier parameters, etc.) These policies allow the loading to be very fast, with nested objects
+instead lazily loaded upon first access by the user.
+
+#### Pre-processing Data Capabilities
 
 This dataset can pre-process the code in several key ways, listed and described below.
 
-#### Data splitting
+##### Data splitting
 
 The system can automatically split the underlying data by subject into random subsets (in a seedable manner)
 via user-specified ratios. These splits can be named, and if three splits are provided (or two splits whose
@@ -235,7 +250,7 @@ in the code to extract only events in the training set, etc.
 Note that the seeds used for this function, and seeds used anywhere throughout this code, are stored within
 the object, even if not specified by the user, so calculations can always be re-covered stably.
 
-#### Pre-process numerical data elements
+##### Pre-process numerical data elements
 
 The system can automatically filter out and/or censor outliers based on pre-specified cutoff values per data
 column and key identifier, fit learned outlier detection models over the data, and fit normalizer models over
@@ -244,14 +259,19 @@ categorical data element.
 
 This applies both to static and dynamic data elements.
 
-#### Pre-process categorical data elements
+Currently, the only supported outlier detection model is a standard-deviation cutoff algorithm, which filters
+out elements that are more than a fixed number of standard deviations away from the mean. The only currently
+supported normalizer model is a standard scaler model which centers data to have zero mean and scales it to
+have unit variance. More models are in progress, and we always welcome further contributions.
+
+##### Pre-process categorical data elements
 
 The system can fit vocabularies to categorical columns and filter out elements that happen insufficiently
 frequently.
 
 This applies both to static and dynamic data elements.
 
-#### Pre-compute and pre-process strictly time-dependent feature functions
+##### Pre-compute and pre-process strictly time-dependent feature functions
 
 Some features are dynamic, but rather than being dictated by events in the data, they are determined on the
 basis of a priori, known functions whose sole input is the time of the event. Some examples of this include
@@ -260,13 +280,13 @@ the time-of-day of the event (e.g., morning, evening, etc.), the subject's age a
 The system contained here can pre-compute these time-dependent feature values, then apply the same
 pre-processing capabilities to the appropriate column types to the results.
 
-#### Re-organize the final, transformed datasets to produce a DL friendly view
+##### Re-organize the final, transformed datasets to produce a DL friendly view
 
 As discussed above, the datasets can also be massaged into a format more suitable for deep-learning.
 
-### Internal Storage
+#### Internal Storage
 
-#### `EventStreamDataset.subjects_df`
+##### `EventStream.data.Dataset.subjects_df`
 
 This dataframe stores the _subjects_ that make up the data. It has a subject per row and has the following
 mandatory schema elements:
@@ -276,7 +296,7 @@ mandatory schema elements:
 It may have additional, user-defined schema elements that can be leveraged during dataset pre-processing for
 use in modelling. After transformation, column types will have been compressed to save memory.
 
-#### `EventStreamDataset.events_df`
+##### `EventStream.data.Dataset.events_df`
 
 This dataframe stores the _events_ that make up the data. It has an event per row and has the following schema
 elements:
@@ -287,7 +307,7 @@ elements:
 - A datetime column `timestamp` which tracks the time of the row's event.
 - A categorical column `event_type` which indicates what type of event the row's event is.
 
-#### `EventStreamDataset.dynamic_measurements_df`
+##### `EventStream.data.Dataset.dynamic_measurements_df`
 
 This dataframe stores the _metadata elements_ that describe each event in the data. It has a metadata element
 per row and has the following mandatory schema elements:
@@ -306,9 +326,9 @@ per row and has the following mandatory schema elements:
 It may have additional, user-defined schema elements that can be leveraged during dataset pre-processing for
 use in modelling.
 
-## `EventStreamPytorchDataset`
+### `EventStream.data.PytorchDataset`
 
-This class reads the DL-friendly representation from disk produced by an `EventStreamDataset` object, as well
+This class reads the DL-friendly representation from disk produced by an `EventStream.data.Dataset` object, as well
 as the vocabulary config object saved to disk from that dataset, and produces pytorch items and collates
 batches for downstream use. There are three relevant data structures to understand here:
 
@@ -316,12 +336,12 @@ batches for downstream use. There are three relevant data structures to understa
 2. That of individual items returned from `__getitem__`
 3. That of batches produced by class instance's `collate` function.
 
-### Task specification
+#### Task specification
 
-When constructed by default, an `EventStreamPytorchDataset` takes only an `EventStreamDataset` object, a data
+When constructed by default, an `EventStream.data.PytorchDataset` takes only an `EventStream.data.Dataset` object, a data
 split (e.g., `'train'`, `'tuning'`, or `'held_out'`), and a
 very lightweight configuration object with pytorch specific options. In this mode, it will have length given
-by the number of subjects in the `EventStreamDataset` and will produce batches suitable for embedding and
+by the number of subjects in the `EventStream.data.Dataset` and will produce batches suitable for embedding and
 downstream modelling over randomly chosen sub-sequences within each subject's data capped at the
 config-specified maximum sequence length. This mode is useful for generative sequence modelling, but less so
 for supervised learning, in which we need finer control over the subjects, ranges, and labels returned from
@@ -337,7 +357,7 @@ the pytorch dataset will have length equal to the subset of `task_df` that repre
 these columns for use, including inferring vocabularies for categorical or integral valued columns, such that
 variables can be automatically filled on model configuration objects based on dataset specification.
 
-### Per-item representation
+#### Per-item representation
 
 The `__getitem__(i)` method, which returns the data element for patient `i`, returns dictionaries as follows.
 Let us define the following variables:
@@ -351,7 +371,7 @@ Let us define the following variables:
   # Control variables
   # These aren't used directly in actual computation, but rather are used to define losses, positional
   # embeddings, dependency graph positions, etc.
-  'time': [L],
+  'time_delta': [L],
 
   # Static Embedding Variables
   # These variables are static --- they are constant throughout the entire sequence of events.
@@ -372,8 +392,7 @@ the following kinds of features:
 
 - `'static_*'` corresponds to features of the subject that are static over the duration of the sequence.
   E.g., in a medical dataset, a patient's polygenic risk score is unchanging throughout their life.
-- `'time'` corresponds to the number of minutes since the start of the day (in local time) of the first
-  event of the sequence.
+- `'time_delta'` corresponds to the number of minutes until the next event in the sequence.
 - `'dynamic_*'` corresponds to event specific metadata elements describing each sequence event.
 - `'*_indices'` corresponds to the categorical index of the data element. E.g., in a medical dataset, the
   index of a particular laboratory test.
@@ -386,11 +405,11 @@ the following kinds of features:
 If a `task_df` with associated task labels were also specified, then there will also be an entry in the output
 dictionary per task label containing the task's label for that row in the dataframe as a single-element list.
 
-### Batch representation: `EventStreamPytorchBatch`
+#### Batch representation: `EventStream.data.PytorchBatch`
 
 The `collate` function takes a list of per-item representation and returns a batch representation. This final
 batch representation can be accessed like a dictionary, but it is also a object stored in `types.py` of class
-`EventStreamPytorchBatch`. It has some additional properties that can be useful, such as `batch_size`,
+`EventStream.data.PytorchBatch`. It has some additional properties that can be useful, such as `batch_size`,
 `sequence_length`, and `n_data_elements`.
 
 The batch representation has the following structure. Let us define the following variables:
@@ -401,11 +420,11 @@ The batch representation has the following structure. Let us define the followin
 - `K` is the per-batch maximum number of static data elements.
 
 ```
-EventStreamPytorchBatch(**{
+EventStream.data.PytorchBatch(**{
   # Control variables
   # These aren't used directly in actual computation, but rather are used to define losses, positional
   # embeddings, dependency graph positions, etc.
-  'time': [B X L], # (FloatTensor, normalized such that the first entry for each sequence is 0)
+  'time_delta': [B X L], # (FloatTensor)
   'event_mask': [B X L], # (BoolTensor, capturing whether an event was observed at an index)
   'dynamic_values_mask': [B X L X M], # (BoolTensor, indicates whether a dynamic value was observed)
 
@@ -426,7 +445,7 @@ If a `task_df` with associated task labels were also specified, then there will 
 `stream_labels` within this output batch object that has keys given by task names and values given by collated
 tensors of those task labels.
 
-## Data Embedding: `DataEmbeddingLayer`
+### Data Embedding: `DataEmbeddingLayer`
 
 Once data are collated into a batch, they need to be usable in a pytorch deep learning model. Ultimately, any
 functional embedding strategy will produce a view that contains a fixed size representation of each event in

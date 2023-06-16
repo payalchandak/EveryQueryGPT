@@ -13,7 +13,7 @@ from EventStream.transformer.generative_layers import (
     LogNormalMixtureTTELayer,
 )
 
-from ..mixins import MLTypeEqualityCheckableMixin
+from ..utils import MLTypeEqualityCheckableMixin
 
 
 class TestLogNormalMixture(MLTypeEqualityCheckableMixin, unittest.TestCase):
@@ -338,9 +338,7 @@ class TestGaussianIndexedRegressionLayer(MLTypeEqualityCheckableMixin, unittest.
             ]
         )
 
-        self.assertEqual(
-            want_X_grad_sign, X.grad.sign(), msg=f"{want_X_grad_sign} vs.  {X.grad.sign()}"
-        )
+        self.assertEqual(want_X_grad_sign, X.grad.sign(), msg=f"{want_X_grad_sign} vs.  {X.grad.sign()}")
 
 
 if __name__ == "__main__":

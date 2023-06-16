@@ -7,9 +7,11 @@ import unittest
 import torch
 
 from EventStream.data.types import PytorchBatch
-from EventStream.transformer.generation_utils import StructuredGenerationMixin
+from EventStream.transformer.generation.generation_utils import (
+    StructuredGenerationMixin,
+)
 
-from ..mixins import MLTypeEqualityCheckableMixin
+from ..utils import MLTypeEqualityCheckableMixin
 
 BASE_BATCH = {
     "event_mask": torch.BoolTensor([[False, True, True], [True, True, True]]),
@@ -50,6 +52,7 @@ BASE_BATCH = {
         ]
     ),
     "stream_labels": {"clf": torch.LongTensor([1, 44]), "reg": torch.FloatTensor([2.0, 1.8])},
+    "time": None,
 }
 
 EXPANDED_BATCH_2 = {
@@ -138,6 +141,7 @@ EXPANDED_BATCH_2 = {
         "clf": torch.LongTensor([1, 1, 44, 44]),
         "reg": torch.FloatTensor([2, 2, 1.8, 1.8]),
     },
+    "time": None,
 }
 
 
@@ -149,14 +153,10 @@ class TestGenerativeSequenceModelSamples(MLTypeEqualityCheckableMixin, unittest.
         self.batch = PytorchBatch(**BASE_BATCH)
 
     def test_expand_inputs_for_generation(self):
-        out_batch = StructuredGenerationMixin._expand_inputs_for_generation(
-            batch=self.batch, expand_size=1
-        )
+        out_batch = StructuredGenerationMixin._expand_inputs_for_generation(batch=self.batch, expand_size=1)
         self.assertNestedDictEqual(BASE_BATCH, {k: v for k, v in out_batch.items()})
 
-        out_batch_2 = StructuredGenerationMixin._expand_inputs_for_generation(
-            batch=self.batch, expand_size=2
-        )
+        out_batch_2 = StructuredGenerationMixin._expand_inputs_for_generation(batch=self.batch, expand_size=2)
         self.assertNestedDictEqual(EXPANDED_BATCH_2, {k: v for k, v in out_batch_2.items()})
 
 

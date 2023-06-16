@@ -1,6 +1,8 @@
 #!/usr/bin/env python
+"""Pre-trains a model from scartch."""
 
 try:
+    # This color-codes and prettifies error messages if the script fails.
     import stackprinter
 
     stackprinter.set_excepthook(style="darkbg2")
@@ -8,12 +10,13 @@ except ImportError:
     pass  # no need to fail because of missing dev dependency
 
 import copy
+import os
 
 import hydra
 import torch
 from omegaconf import OmegaConf
 
-from EventStream.transformer.generative_sequence_modelling_lightning import (
+from EventStream.transformer.lightning_modules.generative_modeling import (
     PretrainConfig,
     train,
 )
@@ -27,12 +30,13 @@ def main(cfg: PretrainConfig):
         cfg = hydra.utils.instantiate(cfg, _convert_="object")
     # TODO(mmd): This isn't the right return value for hyperparameter sweeps.
 
-    cfg_fp = cfg.save_dir / "pretrain_config.yaml"
-    cfg_fp.parent.mkdir(exist_ok=True, parents=True)
+    if os.environ.get("LOCAL_RANK", "0") == "0":
+        cfg_fp = cfg.save_dir / "pretrain_config.yaml"
+        cfg_fp.parent.mkdir(exist_ok=True, parents=True)
 
-    cfg_dict = copy.deepcopy(cfg)
-    cfg_dict.config = cfg_dict.config.to_dict()
-    OmegaConf.save(cfg_dict, cfg_fp)
+        cfg_dict = copy.deepcopy(cfg)
+        cfg_dict.config = cfg_dict.config.to_dict()
+        OmegaConf.save(cfg_dict, cfg_fp)
 
     return train(cfg)
 

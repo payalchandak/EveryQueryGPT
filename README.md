@@ -1,35 +1,47 @@
-# Event Stream ML
+# Event Stream GPT
 
-EventStream is a codebase for managing and modeling event stream datasets, which consist of sequences of continuous-time events containing various categorical or continuous measurements. Examples of such data include electronic health records, financial transactions, and sensor data. The repo contains two major sub-modules: EventStreamData, for handling event stream datasets in raw form and with Pytorch for modeling, and EventStreamTransformer, which includes Hugging Face-compatible transformer models, generative layers for marked point-process and continuous-time sequence modeling, and Lightning wrappers for training these models.
+[![python](https://img.shields.io/badge/-Python_3.10-blue?logo=python&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![pytorch](https://img.shields.io/badge/PyTorch_2.0+-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/get-started/locally/)
+[![lightning](https://img.shields.io/badge/-Lightning_2.0+-792ee5?logo=pytorchlightning&logoColor=white)](https://pytorchlightning.ai/)
+[![hydra](https://img.shields.io/badge/Config-Hydra_1.3-89b8cd)](https://hydra.cc/)
+[![tests](https://github.com/mmcdermott/EventStreamGPT/actions/workflows/tests.yml/badge.svg)](https://github.com/mmcdermott/EventStreamGPT/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/mmcdermott/EventStreamML/branch/main/graph/badge.svg?token=F9NYFEN5FX)](https://codecov.io/gh/mmcdermott/EventStreamML)
+[![code-quality](https://github.com/mmcdermott/EventStreamGPT/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/mmcdermott/EventStreamGPT/actions/workflows/code-quality-main.yaml)
+[![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/mmcdermott/EventStreamGPT#license)
+[![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mmcdermott/EventStreamGPT/pulls)
+[![contributors](https://img.shields.io/github/contributors/mmcdermott/EventStreamGPT.svg)](https://github.com/mmcdermott/EventStreamGPT/graphs/contributors)
+[![Documentation Status](https://readthedocs.org/projects/eventstreamml/badge/?version=latest)](https://eventstreamml.readthedocs.io/en/latest/?badge=latest)
+
+Event Stream GPT is a codebase for managing and modeling "event stream" datasets, which consist of sequences of continuous-time events containing categorical or continuous measurements with complex internal dependencies. Examples of such data include electronic health records, financial transactions, and sensor data. The repo contains two major sub-modules: [`data`](EventStream/data), for handling event stream datasets in raw form and with Pytorch for modeling, and [`transformer`](EventStream/transformer), which includes Hugging Face-compatible transformer models, generative layers for marked point-process and continuous-time sequence modeling, Lightning wrappers for training these models, and utilities for performing zero-shot evaluation with these models through an analog of prompting applied to event stream data.
 
 ## Installation
 
-Installation can be done via conda with the `env.yml` file:
-
-```
-conda env create -n ${ENV_NAME} -f env.yml
-
-```
-
-The `env.yml` file contains all the necessary dependencies for the system.
+Installation of the requisite packages can be done via conda with the `env.yml` file: `conda env create -n ${ENV_NAME} -f env.yml`
 
 ## Overview
 
 This codebase contains utilities for working with event stream datasets, meaning datasets where any given sample consists of a sequence of continuous-time events. Each event can consist of various categorical or continuous measurements of various structures.
 
-### EventStreamData
+### [`data`](https://github.com/mmcdermott/EventStreamGPT/tree/main/EventStream/data)
 
 Event stream datasets are represented via a dataframe of events (containing event times, types, and subject ids), subjects (containing subject ids and per-subject static measurements), and per-event dynamic measurements (containing event ids, types, subject ids, and arbitrary metadata columns). Many dynamic measurements can belong to a single event. This class can also take in a functional specification for measurements that can be computed in a fixed manner dependent only on event time and per-subject static data.
 
-An EventStreamDataset can automatically pre-process train-set metadata, learning categorical vocabularies, handling numerical data type conversion, rule-based outlier removal, and training of outlier detection and normalization models.
+A `EventStream.data.Dataset` can automatically pre-process train-set metadata, learning categorical vocabularies, handling numerical data type conversion, rule-based outlier removal, and training of outlier detection and normalization models.
 
-It can also be processed into an EventStreamPytorchDataset, which represents these data via batches.
+It can also be processed into an `EventStream.data.PytorchDataset`, which represents these data via batches.
 
-Please see the EventStreamData `README.md` file for more information.
+Please see the [`data/README.md`](https://github.com/mmcdermott/EventStreamGPT/tree/main/EventStream/data) file for more information.
 
-### EventStreamTransformer
+### [`transformer`](https://github.com/mmcdermott/EventStreamGPT/tree/main/EventStream/transformer)
 
-Functionally, there are three areas of differences between a traditional sequence transformer and an EventStreamTransformer: the input, how attention is processed in a per-event manner, and how generative output layers work. Please see EventStreamTransformer's `README` file for more information.
+Functionally, there are three areas of differences between a traditional GPT model and an `EventStream.transformer` model: the input, how attention is processed in a per-event manner, and how generative output layers work. Please see EventStreamTransformer's `README` file for more information.
+
+### Example
+
+For an end to end example over MIMIC-IV, see the
+[tutorial](https://eventstreamml.readthedocs.io/en/latest/MIMIC_IV_tutorial/index.html)
+and the
+[companion repository](https://github.com/mmcdermott/MIMICIV_FMs_public)
 
 ## Scripts
 
@@ -37,17 +49,31 @@ You can use several scripts from this repository. These scripts are built using
 [hydra](https://hydra.cc/docs/intro/), so generally you will use them by specifying a mixture of command line
 overrides and local configuration options in `yaml` files.
 
+### Dataset Building
+
+The script endpoint to build a dataset is in
+[`scripts/build_dataset.py`](https://github.com/mmcdermott/EventStreamGPT/blob/main/scripts/build_dataset.py).
+To run this script, simply call it and override its parameters via hydra:
+
+```bash
+PYTHONPATH="$EVENT_STREAM_PATH:$PYTHONPATH" python \
+	$EVENT_STREAM_PATH/scripts/build_dataset.py \
+	--config-path=$(pwd)/configs \
+	--config-name=dataset \
+	"hydra.searchpath=[$EVENT_STREAM_PATH/configs]" # put more args here...
+```
+
 ### Pre-training
 
 The script endpoint to launch a pre-training run, with the built in transformer model class here, is in
-[.../scripts/pretrain.py](scripts/pretrain.py). To run this script, simply call it and override its parameters
-via hydra:
+[scripts/pretrain.py](https://github.com/mmcdermott/EventStreamGPT/blob/main/scripts/pretrain.py).
+To run this script, simply call it and override its parameters via hydra:
 
 ```bash
-PYTHONPATH="$EVENT_STREAM_PATH:$PYTHONPATH" python $EVENT_STREAM_PATH/scripts/pretrain.py  \
---config-path='/path/to/local/configs' \
---config-name='local_config_name' \
-optimization_config.batch_size=24 optimization_config.num_dataloader_workers=64` # hydra overrides...
+PYTHONPATH="$EVENT_STREAM_PATH:$PYTHONPATH" python $EVENT_STREAM_PATH/scripts/pretrain.py \
+	--config-path='/path/to/local/configs' \
+	--config-name='local_config_name' \
+	optimization_config.batch_size=24 optimization_config.num_dataloader_workers=64 # hydra overrides...
 ```
 
 In your local config file (or via the command line), you can override various parameters, e.g.
@@ -64,17 +90,18 @@ data_config:
 
 config:
   measurements_per_dep_graph_level:
-    - ['age', 'time_of_day']
-    - ['event_type']
-    - ['next_param', ['multivariate_regression_task', 'categorical_only'], ...
-        'can_do_multiline', ...]
-    - - 'can_also_use_yaml_syntax'
-      - ['multivariate_regression_task', 'categorical_and_numerical']
+    - [age, time_of_day]
+    - [event_type]
+    - [next_param, [multivariate_regression_task, categorical_only], "... 'can_do_multiline'",
+      '...']
+    -   - can_also_use_yaml_syntax
+        - [multivariate_regression_task, categorical_and_numerical]
 ```
 
 The default hydra config for this object is a structured config stored in the configstore with name
 `pretrain_config`, defined in the `PretrainConfig` dataclass object in
-`generative_sequence_modeling_lightning.py` file:
+[`generative_modeling.py`](https://github.com/mmcdermott/EventStreamGPT/blob/main/EventStream/transformer/lightning_modules/generative_modeling.py)
+file:
 
 ```python
 @hydra_dataclass
@@ -84,7 +111,11 @@ class PretrainConfig:
     config: dict[str, Any] = dataclasses.field(
         default_factory=lambda: {
             "_target_": "EventStream.transformer.config.StructuredTransformerConfig",
-            **{k: v for k, v in StructuredTransformerConfig().to_dict().items() if k not in SKIP_CFG_PARAMS}
+            **{
+                k: v
+                for k, v in StructuredTransformerConfig().to_dict().items()
+                if k not in SKIP_CFG_PARAMS
+            },
         }
     )
     optimization_config: OptimizationConfig = OptimizationConfig()
@@ -112,20 +143,21 @@ class PretrainConfig:
 #### Hyperparameter Tuning
 
 To launch a weights and biases hyperparameter sweep, you can use the
-[.../scripts/launch_wandb_hp_sweep.py](scripts/launch_wandb_hp_sweep.py) file.
+[scripts/launch_wandb_hp_sweep.py](https://github.com/mmcdermott/EventStreamGPT/blob/main/scripts/launch_wandb_hp_sweep.py)
+file.
 
 ```bash
 PYTHONPATH="$EVENT_STREAM_PATH:$PYTHONPATH" python $EVENT_STREAM_PATH/scripts/launch_wandb_hp_sweep.py \
-    --config-path='/path/to/local/configs' \
-    --config-name='local_config_name' \
-    'hydra.searchpath=[$EVENT_STREAM_PATH/configs]' # This line ensures hydra can find the pre-defined default
+	--config-path=/path/to/local/configs \
+	--config-name=local_config_name \
+	hydra.searchpath=[$EVENT_STREAM_PATH/configs] # This line ensures hydra can find the pre-defined default
 ```
 
 An example of the overriding local config is:
 
 ```yaml
 defaults:
-  - hyperparameter_sweep # IMPORTANT: This defaults to the pre-defined repository config!
+  - hyperparameter_sweep_base # IMPORTANT: This defaults to the pre-defined repository config!
   - _self_
 
 parameters:
@@ -139,9 +171,9 @@ parameters:
   config:
     measurements_per_dep_graph_level:
       values:
-        - - [param list 1 entry 1]
-          - [param list 1 entry 2]
-          - ...
+        -   - [param list 1 entry 1]
+            - [param list 1 entry 2]
+            - '...'
 ```
 
 The default config establishes default ranges for a number of standard parameters, and uses hydra mandatory
@@ -159,10 +191,10 @@ Of course, this module isn't merely intended for you to be able to run this clas
 also enable you to easily test your own, huggingface API compatible models. To make your own model, you can
 follow the below steps:
 
-1. Write your own model class. Structure it to follow the interface (inputs and outputs) of
-   [`ESTForGenerativeSequenceModeling`](EventStream/transformer/model.py).
+1. Write your own model class. Structure it to follow the interface (inputs and outputs) of EventStream
+   models.
 2. Copy the
-   [.../EventStream/transformer/generative_sequence_model_lightning.py](EventStream/transformer/generative_sequence_model_lightning.py)
+   [generative_modeling.py](https://github.com/mmcdermott/EventStreamGPT/blob/main/EventStream/transformer/lightning_modules/generative_modeling.py)
    file into your own repository. Adjust imports as necessary to refer to the installed EventStream Package
    and your new model.
 3. Adjust the internals of your new lightning class so the internal model used is your model class.
@@ -179,14 +211,16 @@ copied from this repository; stay tuned for further updates on that front!
 
 ### Fine-tuning
 
-To fine-tune a model, use the [finetune.py](scripts/finetune.py) script. Much like pre-training, this script
-leverages hydra to run, but now using the [`FinetuneConfig`](transformer/stream_classification_lightning.py)
+To fine-tune a model, use the
+[`scripts/finetune.py`](https://github.com/mmcdermott/EventStreamGPT/blob/main/scripts/finetune.py)
+script. Much like pre-training, this script leverages hydra to run, but now using the `FinetuneConfig`
 configuration object:
 
 ```python
 @hydra_dataclass
 class FinetuneConfig:
     load_from_model_dir: str | Path = omegaconf.MISSING
+    seed: int = 1
 
     pretrained_weights_fp: Path | None = None
     save_dir: str | None = None
@@ -196,8 +230,13 @@ class FinetuneConfig:
     optimization_config: OptimizationConfig = OptimizationConfig()
 
     task_df_name: str | None = omegaconf.MISSING
-    train_subset_size: int | str | None = "FULL"
-    train_subset_seed: int | None = 1
+
+    data_config_overrides: dict[str, Any] | None = dataclasses.field(
+        default_factory=lambda: {
+            "subsequence_sampling_strategy": SubsequenceSamplingStrategy.TO_END,
+            "seq_padding_side": SeqPaddingSide.RIGHT,
+        }
+    )
 
     trainer_config: dict[str, Any] = dataclasses.field(
         default_factory=lambda: {
@@ -211,17 +250,27 @@ class FinetuneConfig:
     task_specific_params: dict[str, Any] = dataclasses.field(
         default_factory=lambda: {
             "pooling_method": "last",
+            "num_samples": None,
         }
     )
 
     config_overrides: dict[str, Any] = dataclasses.field(default_factory=lambda: {})
 
-    wandb_name: str | None = "${task_df_name}_finetuning"
-    wandb_project: str | None = None
-    wandb_team: str | None = None
-    extra_wandb_log_params: dict[str, Any] | None = None
+    wandb_logger_kwargs: dict[str, Any] = dataclasses.field(
+        default_factory=lambda: {
+            "name": "${task_df_name}_finetuning",
+            "project": None,
+            "team": None,
+            "log_model": True,
+            "do_log_graph": True,
+        }
+    )
 
-    num_dataloader_workers: int = 1
+    wandb_experiment_config_kwargs: dict[str, Any] = dataclasses.field(
+        default_factory=lambda: {
+            "save_dir": "${save_dir}",
+        }
+    )
 ```
 
 The hydra integration is not quite as smooth at fine-tuning time as it is during pre-training; namely, this is
@@ -234,12 +283,12 @@ look like:
 
 ```bash
 PYTHONPATH="$EVENT_STREAM_PATH:$PYTHONPATH" python $EVENT_STREAM_PATH/scripts/finetune.py \
-load_from_model_dir=/pretrained/model/dir \
-optimization_config.batch_size=64 \
-optimization_config.init_lr=1e-4 \
-optimization_config.end_lr=null  \
-optimization_config.max_epochs=25 \
-task_df_name=lv_ef/60d
+	load_from_model_dir=/pretrained/model/dir \
+	optimization_config.batch_size=64 \
+	optimization_config.init_lr=1e-4 \
+	optimization_config.end_lr=null \
+	optimization_config.max_epochs=25 \
+	task_df_name=lv_ef/60d
 ```
 
 If you wish to pursue a few-shot fine-tuning experiment, you can use the parameters `train_subset_size` and
@@ -248,31 +297,36 @@ If you wish to pursue a few-shot fine-tuning experiment, you can use the paramet
 ### Zero-shot Generation
 
 Building on the existing HuggingFace API, you can also generate future values given a generative model very
-easily. In particular, given a [`FinetuneConfig`](transformer/stream_classification_lightning.py) object
-describing the data/model you wish to use for generation, you can simply do the following:
+easily. In particular, given a
+[`FinetuneConfig`](https://github.com/mmcdermott/EventStreamGPT/blob/main/EventStream/transformer/lightning_modules/fine_tuning.py)
+object describing the data/model you wish to use for generation, you can simply do the following:
 
 ```python
 # Initialize the config, overwriting the `max_seq_len` argument to a smaller value for the `data_config` to
 # account for the elements you'll generate within the model's maximum sequence length.
 cfg = FinetuneConfig(
     load_from_model_dir=MODEL_DIR,
-    task_df_name = TASK_DF_NAME,
+    task_df_name=TASK_DF_NAME,
     data_config_overrides={
-        'max_seq_len': 128,
-        'subsequence_sampling_strategy': 'to_end',
-        'do_include_start_time_min': True,
-        'seq_padding_side': 'left',
+        "max_seq_len": 128,
+        "subsequence_sampling_strategy": "to_end",
+        "do_include_start_time_min": True,
+        "seq_padding_side": "left",
     },
 )
-ESD = Dataset._load(cfg.data_config.save_dir)
-train_pyd = PytorchDataset(cfg.data_config, split='train')
-M = ESTForGenerativeSequenceModeling.from_pretrained(cfg.pretrained_weights_fp, config=cfg.config)
-sample_dataloader = DataLoader(train_pyd, batch_size=1, collate_fn=train_pyd.collate, shuffle=False)
+ESD = Dataset.load(cfg.data_config.save_dir)
+train_pyd = PytorchDataset(cfg.data_config, split="train")
+M = ESTForGenerativeSequenceModeling.from_pretrained(
+    cfg.pretrained_weights_fp, config=cfg.config
+)
+sample_dataloader = DataLoader(
+    train_pyd, batch_size=1, collate_fn=train_pyd.collate, shuffle=False
+)
 sample_batch = next(iter(sample_dataloader))
 
 generated = M.generate(
     sample_batch,
-    max_new_events=2, # Note that this must be within the model's `max_seq_len` - the input data length
+    max_new_events=2,  # Note that this must be within the model's `max_seq_len` - the input data length
     do_sample=True,
     return_dict_in_generate=True,
     output_scores=True,
@@ -282,21 +336,23 @@ generated = M.generate(
 # the new, generated data
 ```
 
-### Foundation Model Evaluation
+#### Automated Zero-shot Evaluation
 
-Our suggested evaluation suite focuses on assessing the emergence of foundation model capabilities. To that
-end, it consists of the following steps:
+You can use generation to perform zero-shot predictions for a given fine-tuning task by following the
+following steps:
 
-1. Determine appropriate hyperparameters for your pretraining setup. In our current evaluation suite, we
-   leverage a single set of hyperparameters across all pretraining dataset subset sizes, though this is
-   likely sub-optimal in practice.
-2. Pre-train models at optimal hyperparameters on a robust range of pretraining dataset subset sizes, with
-   multiple random seeds being run over smaller subsets to ameliorate variance.
-3. ...
-
-## Examples
-
-You can see examples of this codebase at work via the tests.
+1. Make a new python file which contains a "labeler": a python object subclassing the
+   [`Labeler`](https://github.com/mmcdermott/EventStreamGPT/blob/main/EventStream/transformer/zero_shot_labeler.py)
+   interface which implements a `__call__` method taking as input a batch of data, an input sequence length,
+   and a configuration file and predict your task's label. from that batch, if possible, and otherwise
+   indicate that it is not possible. For example, if your task is to predict in-hospital mortality, your class
+   would need to look at the elements of the batch after the input sequence length and see if any death events
+   happen before the first discharge event.
+2. You need to copy this labeling class definition file (all necessary functions and such used by the class
+   must live in that single file) into the data directories task dataframes subfolder with the name
+   `${task_df_name}_labeler.py`.
+3. You can then use the `scripts/zeroshot.py` script to run a zero-shot evaluation via a Hydra
+   config on that task labeler and any pre-trained model.
 
 ## Testing
 
@@ -315,4 +371,5 @@ Please ensure that your contributions are well-documented and include tests wher
 
 ## License
 
-This project is licensed under the [LICENSE](LICENSE) file provided in the repository.
+This project is licensed under the [LICENSE](https://github.com/mmcdermott/EventStreamGPT/blob/main/LICENSE)
+file provided in the repository.
