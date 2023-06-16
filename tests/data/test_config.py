@@ -16,7 +16,7 @@ from EventStream.data.time_dependent_functor import AgeFunctor
 from EventStream.data.types import DataModality, TemporalityType
 from EventStream.data.vocabulary import Vocabulary
 
-from ..mixins import ConfigComparisonsMixin
+from ..utils import ConfigComparisonsMixin
 
 
 class TestPytorchDatasetConfig(unittest.TestCase):
@@ -76,7 +76,7 @@ class TestMeasurementConfig(ConfigComparisonsMixin, unittest.TestCase):
         valid_kwargs = [
             dict(
                 temporality=TemporalityType.DYNAMIC,
-                modality=DataModality.SINGLE_LABEL_CLASSIFICATION,
+                modality=DataModality.MULTI_LABEL_CLASSIFICATION,
             ),
             dict(
                 temporality=TemporalityType.STATIC,
@@ -103,6 +103,10 @@ class TestMeasurementConfig(ConfigComparisonsMixin, unittest.TestCase):
             MeasurementConfig(**kwargs)
 
         invalid_kwargs = [
+            dict(
+                temporality=TemporalityType.DYNAMIC,
+                modality=DataModality.SINGLE_LABEL_CLASSIFICATION,
+            ),
             dict(
                 temporality=TemporalityType.STATIC,
                 modality=DataModality.MULTIVARIATE_REGRESSION,
@@ -190,7 +194,7 @@ class TestMeasurementConfig(ConfigComparisonsMixin, unittest.TestCase):
 
         config = MeasurementConfig(
             temporality=TemporalityType.DYNAMIC,
-            modality=DataModality.SINGLE_LABEL_CLASSIFICATION,
+            modality=DataModality.MULTI_LABEL_CLASSIFICATION,
         )
 
         with self.assertRaises(ValueError):
@@ -280,8 +284,7 @@ class TestMeasurementConfig(ConfigComparisonsMixin, unittest.TestCase):
     def test_to_and_from_dict(self):
         default_dict = {
             "name": None,
-            "present_in_event_types": None,
-            "modality": DataModality.SINGLE_LABEL_CLASSIFICATION,
+            "modality": DataModality.MULTI_LABEL_CLASSIFICATION,
             "temporality": TemporalityType.DYNAMIC,
             "vocabulary": None,
             "observation_frequency": None,
@@ -294,16 +297,14 @@ class TestMeasurementConfig(ConfigComparisonsMixin, unittest.TestCase):
             index=pd.Index([2, 4, 6], name="col"),
         )
         nontrivial_measurement_metadata_series = pd.Series(["foo"], index=pd.Index(["value_type"]))
-        nontrivial_vocabulary = Vocabulary(
-            vocabulary=["UNK", "A", "B"], obs_frequencies=[0, 0.5, 0.5]
-        )
+        nontrivial_vocabulary = Vocabulary(vocabulary=["UNK", "A", "B"], obs_frequencies=[0, 0.5, 0.5])
 
         cases = [
             {
                 "msg": "Should work when all params are None.",
                 "config": MeasurementConfig(
                     temporality=TemporalityType.DYNAMIC,
-                    modality=DataModality.SINGLE_LABEL_CLASSIFICATION,
+                    modality=DataModality.MULTI_LABEL_CLASSIFICATION,
                 ),
                 "want_dict": {**default_dict},
             },
@@ -488,59 +489,6 @@ class TestDatasetConfig(ConfigComparisonsMixin, unittest.TestCase):
 
                 got_config = DatasetConfig.from_dict(C["want_dict"])
                 self.assertEqual(C["config"], got_config)
-
-    def test_from_simple_args(self):
-        want_config = DatasetConfig(
-            measurement_configs={
-                "A_key": MeasurementConfig(
-                    temporality=TemporalityType.DYNAMIC,
-                    modality=DataModality.MULTI_LABEL_CLASSIFICATION,
-                ),
-                "B_key": MeasurementConfig(
-                    temporality=TemporalityType.DYNAMIC,
-                    modality=DataModality.MULTIVARIATE_REGRESSION,
-                    values_column="B_val",
-                ),
-                "C": MeasurementConfig(
-                    temporality=TemporalityType.STATIC,
-                    modality=DataModality.SINGLE_LABEL_CLASSIFICATION,
-                ),
-                "D": MeasurementConfig(
-                    temporality=TemporalityType.FUNCTIONAL_TIME_DEPENDENT,
-                    functor=AgeFunctor("dob"),
-                ),
-            },
-            min_valid_column_observations=10,
-        )
-
-        got_config = DatasetConfig.from_simple_args(
-            dynamic_measurement_columns=["A_key", ("B_key", "B_val")],
-            static_measurement_columns=["C"],
-            time_dependent_measurement_columns=[("D", AgeFunctor("dob"))],
-            min_valid_column_observations=10,
-        )
-        self.assertEqual(want_config, got_config)
-
-        want_config = DatasetConfig(
-            measurement_configs={
-                "A_key": MeasurementConfig(
-                    temporality=TemporalityType.DYNAMIC,
-                    modality=DataModality.MULTI_LABEL_CLASSIFICATION,
-                ),
-                "B_key": MeasurementConfig(
-                    temporality=TemporalityType.DYNAMIC,
-                    modality=DataModality.MULTIVARIATE_REGRESSION,
-                    values_column="B_val",
-                ),
-            },
-            min_valid_column_observations=10,
-        )
-
-        got_config = DatasetConfig.from_simple_args(
-            dynamic_measurement_columns=["A_key", ("B_key", "B_val")],
-            min_valid_column_observations=10,
-        )
-        self.assertEqual(want_config, got_config)
 
     def test_eq(self):
         config1 = DatasetConfig(

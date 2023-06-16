@@ -20,7 +20,7 @@ from EventStream.transformer.config import (
     TimeToEventGenerationHeadType,
 )
 
-from ..mixins import ConfigComparisonsMixin
+from ..utils import ConfigComparisonsMixin
 
 
 class TestMetricsConfig(unittest.TestCase):
@@ -99,9 +99,7 @@ class TestMetricsConfig(unittest.TestCase):
             {
                 "msg": "Should log when metric_name is None",
                 "cat": MetricCategories.CLASSIFICATION,
-                "include_metrics": {
-                    split: {MetricCategories.CLASSIFICATION: {Metrics.AUROC: True}}
-                },
+                "include_metrics": {split: {MetricCategories.CLASSIFICATION: {Metrics.AUROC: True}}},
                 "metric_name": None,
                 "want": True,
             },
@@ -115,18 +113,14 @@ class TestMetricsConfig(unittest.TestCase):
             {
                 "msg": "Should log when metric is included and all averagings are included.",
                 "cat": MetricCategories.CLASSIFICATION,
-                "include_metrics": {
-                    split: {MetricCategories.CLASSIFICATION: {Metrics.AUROC: True}}
-                },
+                "include_metrics": {split: {MetricCategories.CLASSIFICATION: {Metrics.AUROC: True}}},
                 "metric_name": f"{Averaging.WEIGHTED}_{Metrics.AUROC}",
                 "want": True,
             },
             {
                 "msg": "Should not log when metric is not included even if all averagings are included.",
                 "cat": MetricCategories.CLASSIFICATION,
-                "include_metrics": {
-                    split: {MetricCategories.CLASSIFICATION: {Metrics.AUROC: True}}
-                },
+                "include_metrics": {split: {MetricCategories.CLASSIFICATION: {Metrics.AUROC: True}}},
                 "metric_name": f"{Averaging.WEIGHTED}_{Metrics.AUPRC}",
                 "want": False,
             },
@@ -161,9 +155,7 @@ class TestMetricsConfig(unittest.TestCase):
 
         for case in cases:
             with self.subTest(msg=case["msg"]):
-                MC = MetricsConfig(
-                    do_skip_all_metrics=False, include_metrics=case["include_metrics"]
-                )
+                MC = MetricsConfig(do_skip_all_metrics=False, include_metrics=case["include_metrics"])
                 if case.get("do_log_only_loss", False):
                     MC.do_log_only_loss = MagicMock(return_value=True)
                 else:
@@ -262,8 +254,7 @@ DEFAULT_LOGNORMAL_MIXTURE_DICT = dict(
 
 class TestStructuredTransformerConfig(ConfigComparisonsMixin, unittest.TestCase):
     def test_construction(self):
-        """Tests the construction and initialization logic of the `StructuredTransformerConfig`
-        object."""
+        """Tests the construction and initialization logic of the `StructuredTransformerConfig` object."""
 
         cases = [
             {
@@ -523,9 +514,9 @@ class TestStructuredTransformerConfig(ConfigComparisonsMixin, unittest.TestCase)
     def test_save_load(self):
         """Tests the saving and loading of these configs.
 
-        While this is largely huggingface functionality, here we test it to ensure that even when
-        set to various modes, with different validity requirements, saving and re-loading is still
-        possible (e.g., ensuring that post-processing doesn't invalidate validation constraints).
+        While this is largely huggingface functionality, here we test it to ensure that even when set to
+        various modes, with different validity requirements, saving and re-loading is still possible (e.g.,
+        ensuring that post-processing doesn't invalidate validation constraints).
         """
         for params in (
             {},
@@ -547,9 +538,7 @@ class TestStructuredTransformerConfig(ConfigComparisonsMixin, unittest.TestCase)
                 self.assertEqual(cfg, got_cfg)
 
                 with self.assertRaises(FileNotFoundError):
-                    got_cfg = StructuredTransformerConfig.from_json_file(
-                        Path(d) / "not_found.json"
-                    )
+                    got_cfg = StructuredTransformerConfig.from_json_file(Path(d) / "not_found.json")
 
                 with self.assertRaises(FileNotFoundError):
                     cfg.to_json_file(Path(d) / "not_found" / "config.json")

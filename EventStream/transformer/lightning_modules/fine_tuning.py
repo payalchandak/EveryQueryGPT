@@ -88,9 +88,7 @@ class ESTForStreamClassificationLM(L.LightningModule):
         if pretrained_weights_fp is None:
             self.model = ESTForStreamClassification(config)
         else:
-            self.model = ESTForStreamClassification.from_pretrained(
-                pretrained_weights_fp, config=config
-            )
+            self.model = ESTForStreamClassification.from_pretrained(pretrained_weights_fp, config=config)
 
     def save_pretrained(self, model_dir: Path):
         fp = model_dir / "pretrained_weights"
@@ -99,9 +97,7 @@ class ESTForStreamClassificationLM(L.LightningModule):
     def build_metrics(self):
         """Build the various torchmetrics we'll use to track performance."""
 
-        if (self.config.problem_type == "single_label_classification") and (
-            self.config.num_labels > 2
-        ):
+        if (self.config.problem_type == "single_label_classification") and (self.config.num_labels > 2):
             metric_kwargs = {"num_classes": self.config.num_labels}
             if not self.do_debug_mode:
                 metric_kwargs["validate_args"] = False
@@ -115,14 +111,10 @@ class ESTForStreamClassificationLM(L.LightningModule):
                     "weighted_accuracy": MulticlassAccuracy(**metric_kwargs, average="weighted"),
                     "micro_accuracy": MulticlassAccuracy(**metric_kwargs, average="micro"),
                     "macro_AUPRC": MulticlassAveragePrecision(**metric_kwargs, average="macro"),
-                    "weighted_AUPRC": MulticlassAveragePrecision(
-                        **metric_kwargs, average="weighted"
-                    ),
+                    "weighted_AUPRC": MulticlassAveragePrecision(**metric_kwargs, average="weighted"),
                 }
             )
-        elif (self.config.problem_type == "single_label_classification") and (
-            self.config.num_labels == 2
-        ):
+        elif (self.config.problem_type == "single_label_classification") and (self.config.num_labels == 2):
             metric_kwargs = {}
             if not self.do_debug_mode:
                 metric_kwargs["validate_args"] = False
@@ -150,9 +142,7 @@ class ESTForStreamClassificationLM(L.LightningModule):
                     "weighted_accuracy": MultilabelAccuracy(**metric_kwargs, average="weighted"),
                     "micro_accuracy": MultilabelAccuracy(**metric_kwargs, average="micro"),
                     "macro_AUPRC": MultilabelAveragePrecision(**metric_kwargs, average="macro"),
-                    "weighted_AUPRC": MultilabelAveragePrecision(
-                        **metric_kwargs, average="weighted"
-                    ),
+                    "weighted_AUPRC": MultilabelAveragePrecision(**metric_kwargs, average="weighted"),
                     "micro_AUPRC": MultilabelAveragePrecision(**metric_kwargs, average="micro"),
                 }
             )
@@ -167,8 +157,7 @@ class ESTForStreamClassificationLM(L.LightningModule):
         skip_metrics: Sequence[str],
         prefix: str,
     ):
-        """This helper function logs the set of named metrics for the predictions `preds` and labels
-        `labels`.
+        """This helper function logs the set of named metrics for the predictions `preds` and labels `labels`.
 
         Args:
             `preds` (`torch.Tensor`): The predictions for this metric calculation.
@@ -198,9 +187,7 @@ class ESTForStreamClassificationLM(L.LightningModule):
                     f"with preds ({str_summary(preds)}) and labels ({str_summary(labels)}): {e}."
                 )
 
-    def log_metrics(
-        self, results: StreamClassificationModelOutput, skip_metrics: Sequence[str], prefix: str
-    ):
+    def log_metrics(self, results: StreamClassificationModelOutput, skip_metrics: Sequence[str], prefix: str):
         """Logs metric results for a given output result.
 
         Args:
@@ -255,10 +242,9 @@ class ESTForStreamClassificationLM(L.LightningModule):
     def configure_optimizers(self):
         """Configures optimizer and learning rate scheduler.
 
-        Currently this module uses the AdamW optimizer, with configurable weight_decay, with a
-        learning rate warming up from 0 on a per-step manner to the configurable
-        `self.optimization_config.init_lr`, then undergoes polynomial decay as specified via
-        `self.optimization_config`.
+        Currently this module uses the AdamW optimizer, with configurable weight_decay, with a learning rate
+        warming up from 0 on a per-step manner to the configurable `self.optimization_config.init_lr`, then
+        undergoes polynomial decay as specified via `self.optimization_config`.
         """
         opt = torch.optim.AdamW(
             self.model.parameters(),
@@ -284,6 +270,7 @@ class ESTForStreamClassificationLM(L.LightningModule):
 @hydra_dataclass
 class FinetuneConfig:
     load_from_model_dir: str | Path = omegaconf.MISSING
+    seed: int = 1
 
     pretrained_weights_fp: Path | None = None
     save_dir: str | None = None
@@ -349,15 +336,11 @@ class FinetuneConfig:
                 if self.data_config_overrides.get("train_subset_size", None) in (None, "FULL"):
                     self.save_dir = self.load_from_model_dir / "finetuning" / self.task_df_name
                 else:
-                    self.data_config_overrides["train_subset_size"]
-                    self.data_config_overrides["train_subset_seed"]
-                    if self.data_config_overrides["train_subset_seed"] is None:
-                        self.data_config_overrides["train_subset_seed"] = int(
-                            random.randint(1, int(1e6))
-                        )
+                    if self.data_config_overrides.get("train_subset_seed", None) is None:
+                        self.data_config_overrides["train_subset_seed"] = int(random.randint(1, int(1e6)))
                         print(
-                            f"WARNING: train_subset_size={self.train_subset_size} but seed is unset. Setting "
-                            f"to {self.data_config_overrides['train_subset_seed']}"
+                            f"WARNING: train_subset_size={self.data_config_overrides.train_subset_size} but "
+                            f"seed is unset. Setting to {self.data_config_overrides['train_subset_seed']}"
                         )
                     self.save_dir = (
                         self.load_from_model_dir
@@ -381,9 +364,7 @@ class FinetuneConfig:
                         f"Original is {self.task_df_name}. Ignoring data_config_overrides..."
                     )
                     continue
-                print(
-                    f"Overwriting {param} in data_config from {getattr(self.data_config, param)} to {val}"
-                )
+                print(f"Overwriting {param} in data_config from {getattr(self.data_config, param)} to {val}")
                 setattr(self.data_config, param, val)
 
             config_fp = self.load_from_model_dir / "config.json"
@@ -402,11 +383,14 @@ class FinetuneConfig:
 
 @task_wrapper
 def train(cfg: FinetuneConfig):
-    """Runs the end to end training procedure for the ESTForGenerativeSequenceModelingLM model.
+    """Runs the end to end training procedure for the fine-tuning model.
 
-    Args: TODO
+    Args:
+        cfg: The fine-tuning configuration object specifying the cohort and task for which and model from
+            which you wish to fine-tune.
     """
 
+    L.seed_everything(cfg.seed)
     torch.multiprocessing.set_sharing_strategy("file_system")
 
     train_pyd = PytorchDataset(cfg.data_config, split="train")

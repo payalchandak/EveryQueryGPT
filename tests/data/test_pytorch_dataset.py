@@ -3,19 +3,26 @@ import sys
 sys.path.append("../..")
 
 import copy
+import json
 import unittest
 from dataclasses import asdict
 from datetime import datetime, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import polars as pl
 import torch
 
-from EventStream.data.config import PytorchDatasetConfig, VocabularyConfig
+from EventStream.data.config import (
+    MeasurementConfig,
+    PytorchDatasetConfig,
+    VocabularyConfig,
+)
 from EventStream.data.pytorch_dataset import PytorchDataset
 from EventStream.data.types import PytorchBatch
 
-from ..mixins import MLTypeEqualityCheckableMixin
+from ..utils import MLTypeEqualityCheckableMixin
 
 MEASUREMENTS_IDXMAP = {
     "event_type": 1,
@@ -301,6 +308,44 @@ def get_seeded_start_index(seed, curr_len, max_seq_len):
 
 
 class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
+    def get_pyd(
+        self,
+        split: str = "fake_split",
+        task_df: pl.DataFrame | None = None,
+        task_df_name: str = "fake_task",
+        vocabulary_config: VocabularyConfig = VocabularyConfig(),
+        measurement_configs: dict[str, MeasurementConfig] | None = None,
+        **config_kwargs,
+    ):
+        with TemporaryDirectory() as d:
+            save_dir = Path(d)
+
+            DL_fp = save_dir / "DL_reps" / f"{split}.parquet"
+            DL_fp.parent.mkdir(parents=True, exist_ok=True)
+            DL_REP_DF.write_parquet(DL_fp)
+
+            config_kwargs = {"save_dir": save_dir, **config_kwargs}
+            if task_df is not None:
+                config_kwargs["task_df_name"] = task_df_name
+
+                raw_task_df_fp = save_dir / "task_dfs" / f"{task_df_name}.parquet"
+                raw_task_df_fp.parent.mkdir(parents=True, exist_ok=True)
+                task_df.write_parquet(raw_task_df_fp)
+
+            vocabulary_config.to_json_file(save_dir / "vocabulary_config.json")
+
+            if measurement_configs is None:
+                measurement_configs = {}
+
+            inferred_measurement_config_fp = save_dir / "inferred_measurement_configs.json"
+            with open(inferred_measurement_config_fp, mode="w") as f:
+                json.dump({k: v.to_dict() for k, v in measurement_configs.items()}, f)
+
+            config = PytorchDatasetConfig(**config_kwargs)
+
+            pyd = PytorchDataset(config=config, split=split)
+        return config, pyd
+
     def test_normalize_task(self):
         cases = [
             {
@@ -340,24 +385,16 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
                     with self.assertRaises(C["want_raise"]):
                         PytorchDataset.normalize_task(pl.col("c"), C["vals"].dtype)
                 else:
-                    got_type, got_normalizer = PytorchDataset.normalize_task(
-                        pl.col("c"), C["vals"].dtype
-                    )
+                    got_type, got_normalizer = PytorchDataset.normalize_task(pl.col("c"), C["vals"].dtype)
                     self.assertEqual(C["want_type"], got_type)
 
-                    got_vals = (
-                        pl.DataFrame({"c": C["vals"]}).select(got_normalizer).get_column("c")
-                    )
+                    got_vals = pl.DataFrame({"c": C["vals"]}).select(got_normalizer).get_column("c")
                     want_vals = pl.DataFrame({"c": C["want_vals"]}).get_column("c")
 
                     self.assertEqual(want_vals.to_pandas(), got_vals.to_pandas())
 
     def test_get_item_should_collate(self):
-        config = PytorchDatasetConfig(
-            max_seq_len=4,
-            min_seq_len=2,
-        )
-        pyd = PytorchDataset(data=DL_REP_DF, config=config, vocabulary_config=VocabularyConfig())
+        config, pyd = self.get_pyd(max_seq_len=4, min_seq_len=2)
 
         items = [pyd._seeded_getitem(i, seed=1) for i in range(3)]
         pyd.collate(items)
@@ -387,7 +424,7 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
                 "msg": "Should re-set cached data based on task df",
                 "max_seq_len": 4,
                 "min_seq_len": 2,
-                "task_df": TASK_DF.lazy(),
+                "task_df": TASK_DF,
                 "want_items": [
                     {
                         "binary": True,
@@ -396,8 +433,7 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
                         "regression": 1.2,
                         **WANT_SUBJ_1_UNCUT,
                         "time_delta": [
-                            t if i < (2 - 1) else 1
-                            for i, t in enumerate(WANT_SUBJ_1_UNCUT["time_delta"])
+                            t if i < (2 - 1) else 1 for i, t in enumerate(WANT_SUBJ_1_UNCUT["time_delta"])
                         ],
                     },
                     {
@@ -407,8 +443,7 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
                         "regression": 3.2,
                         **WANT_SUBJ_3_UNCUT,
                         "time_delta": [
-                            t if i < (3 - 1) else 1
-                            for i, t in enumerate(WANT_SUBJ_3_UNCUT["time_delta"])
+                            t if i < (3 - 1) else 1 for i, t in enumerate(WANT_SUBJ_3_UNCUT["time_delta"])
                         ],
                     },
                 ],
@@ -424,20 +459,12 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
         ]
 
         for C in cases:
-            config = PytorchDatasetConfig(
-                max_seq_len=C["max_seq_len"],
-                min_seq_len=C["min_seq_len"],
-            )
-            pyd_kwargs = {
-                "data": DL_REP_DF,
-                "config": config,
-                "vocabulary_config": VocabularyConfig(),
-            }
+            get_pyd_kwargs = {"max_seq_len": C["max_seq_len"], "min_seq_len": C["min_seq_len"]}
             if "task_df" in C:
-                pyd_kwargs.update({"task_df": C["task_df"]})
+                get_pyd_kwargs.update({"task_df": C["task_df"]})
 
             with self.subTest(C["msg"]):
-                pyd = PytorchDataset(**pyd_kwargs)
+                config, pyd = self.get_pyd(**get_pyd_kwargs)
 
                 self.assertEqual(len(C["want_items"]), len(pyd))
 
@@ -458,8 +485,7 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
 
     def test_dynamic_collate_fn(self):
         """collate_fn should appropriately combine two batches of ragged tensors."""
-        config = PytorchDatasetConfig(seq_padding_side="right", max_seq_len=10)
-        pyd = PytorchDataset(data=DL_REP_DF, config=config, vocabulary_config=VocabularyConfig())
+        config, pyd = self.get_pyd(seq_padding_side="right", max_seq_len=10)
         pyd.do_produce_static_data = False
 
         subj_1 = {
@@ -507,9 +533,7 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
 
         want_out = PytorchBatch(
             **{
-                "event_mask": torch.BoolTensor(
-                    [[True, True, True, True], [True, True, True, False]]
-                ),
+                "event_mask": torch.BoolTensor([[True, True, True, True], [True, True, True, False]]),
                 "dynamic_values_mask": torch.BoolTensor(
                     [
                         [
@@ -526,9 +550,7 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
                         ],
                     ]
                 ),
-                "time_delta": torch.Tensor(
-                    [[0.0, 24 * 60.0, 2 * 24 * 60.0, 3 * 24 * 60.0], [0, 5, 10, 0]]
-                ),
+                "time_delta": torch.Tensor([[0.0, 24 * 60.0, 2 * 24 * 60.0, 3 * 24 * 60.0], [0, 5, 10, 0]]),
                 "dynamic_indices": torch.LongTensor(
                     [
                         [
@@ -585,18 +607,14 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
 
         self.assertNestedDictEqual(asdict(want_out), asdict(out))
 
-        config = PytorchDatasetConfig(seq_padding_side="left", max_seq_len=10)
-
-        pyd = PytorchDataset(data=DL_REP_DF, config=config, vocabulary_config=VocabularyConfig())
+        config, pyd = self.get_pyd(seq_padding_side="left", max_seq_len=10)
         pyd.do_produce_static_data = False
 
         out = pyd.collate(batches)
 
         want_out = PytorchBatch(
             **{
-                "event_mask": torch.BoolTensor(
-                    [[True, True, True, True], [False, True, True, True]]
-                ),
+                "event_mask": torch.BoolTensor([[True, True, True, True], [False, True, True, True]]),
                 "dynamic_values_mask": torch.BoolTensor(
                     [
                         [
@@ -613,9 +631,7 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
                         ],
                     ]
                 ),
-                "time_delta": torch.Tensor(
-                    [[0.0, 24 * 60.0, 2 * 24 * 60.0, 3 * 24 * 60.0], [0, 0, 5, 10]]
-                ),
+                "time_delta": torch.Tensor([[0.0, 24 * 60.0, 2 * 24 * 60.0, 3 * 24 * 60.0], [0, 0, 5, 10]]),
                 "dynamic_indices": torch.LongTensor(
                     [
                         [
@@ -673,9 +689,7 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
         self.assertNestedDictEqual(asdict(want_out), asdict(out))
 
     def test_collate_fn(self):
-        config = PytorchDatasetConfig(max_seq_len=4)
-
-        pyd = PytorchDataset(data=DL_REP_DF, config=config, vocabulary_config=VocabularyConfig())
+        config, pyd = self.get_pyd(max_seq_len=4)
         pyd.do_produce_static_data = True
 
         want_subj_event_ages = [
@@ -733,9 +747,7 @@ class TestPytorchDataset(MLTypeEqualityCheckableMixin, unittest.TestCase):
 
         want_out = PytorchBatch(
             **{
-                "event_mask": torch.BoolTensor(
-                    [[True, True, True, True], [True, True, False, False]]
-                ),
+                "event_mask": torch.BoolTensor([[True, True, True, True], [True, True, False, False]]),
                 "dynamic_values_mask": torch.BoolTensor(
                     [
                         [

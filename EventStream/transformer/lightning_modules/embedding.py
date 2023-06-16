@@ -7,15 +7,22 @@ import torch
 
 from ...data.pytorch_dataset import PytorchDataset
 from ..config import StructuredEventProcessingMode, StructuredTransformerConfig
-from ..stream_classification_lightning import FinetuneConfig
-from ..transformer import StructuredTransformer, StructuredTransformerPreTrainedModel
+from ..transformer import (
+    ConditionallyIndependentPointProcessTransformer,
+    NestedAttentionPointProcessTransformer,
+    StructuredTransformerPreTrainedModel,
+)
 from ..utils import safe_masked_max, safe_weighted_avg
+from .fine_tuning import FinetuneConfig
 
 
 class EmbeddingsOnlyModel(StructuredTransformerPreTrainedModel):
     def __init__(self, config: StructuredTransformerConfig):
         super().__init__(config)
-        self.encoder = StructuredTransformer(config)
+        if self.config.structured_event_processing_mode == StructuredEventProcessingMode.NESTED_ATTENTION:
+            self.encoder = NestedAttentionPointProcessTransformer(config=config)
+        else:
+            self.encoder = ConditionallyIndependentPointProcessTransformer(config)
 
     def forward(self, *args, **kwargs):
         return self.encoder(*args, **kwargs)
@@ -51,8 +58,7 @@ class ESTForEmbedding(L.LightningModule):
         self.config = config
 
         self.uses_dep_graph = (
-            self.config.structured_event_processing_mode
-            == StructuredEventProcessingMode.NESTED_ATTENTION
+            self.config.structured_event_processing_mode == StructuredEventProcessingMode.NESTED_ATTENTION
         )
         self.pooling_method = config.task_specific_params["pooling_method"]
 
@@ -83,7 +89,12 @@ class ESTForEmbedding(L.LightningModule):
 def get_embeddings(cfg: FinetuneConfig):
     """Gets embeddings.
 
-    TODO
+    Writes embeddings to
+    ``cfg.load_from_model_dir / "embeddings" / cfg.task_df_name / "{split}_embeddings.pt"``.
+
+    Args:
+        cfg: The fine-tuning configuration object specifying the cohort for which and model from which you
+            wish to get embeddings.
     """
 
     torch.multiprocessing.set_sharing_strategy("file_system")
@@ -134,15 +145,11 @@ def get_embeddings(cfg: FinetuneConfig):
         # Getting Embeddings model
         embeddings = torch.cat(trainer.predict(LM, dataloader), 0)
 
-        embeddings_fp = (
-            cfg.load_from_model_dir / "embeddings" / cfg.task_df_name / f"{sp}_embeddings.pt"
-        )
+        embeddings_fp = cfg.load_from_model_dir / "embeddings" / cfg.task_df_name / f"{sp}_embeddings.pt"
 
         if os.environ.get("LOCAL_RANK", "0") == "0":
             if embeddings_fp.is_file() and not cfg.do_overwrite:
-                print(
-                    f"Embeddings already exist at {embeddings_fp}. To overwrite, set `do_overwrite=True`."
-                )
+                print(f"Embeddings already exist at {embeddings_fp}. To overwrite, set `do_overwrite=True`.")
             else:
                 print(f"Saving {sp} embeddings to {embeddings_fp}.")
                 torch.save(embeddings, embeddings_fp)

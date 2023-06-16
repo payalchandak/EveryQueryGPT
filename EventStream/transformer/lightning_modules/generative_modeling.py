@@ -216,9 +216,7 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                                 elif averaging == Averaging.WEIGHTED:
                                     avg_str = "variance_weighted"
                                 else:
-                                    raise ValueError(
-                                        f"{averaging} not supported for explained variance."
-                                    )
+                                    raise ValueError(f"{averaging} not supported for explained variance.")
 
                                 averaging_kwargs = {"multioutput": avg_str}
                             else:
@@ -238,8 +236,7 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         measurement: str,
         cat: MetricCategories,
     ):
-        """This helper function logs the set of named metrics for the predictions `preds` and labels
-        `labels`.
+        """This helper function logs the set of named metrics for the predictions `preds` and labels `labels`.
 
         Args:
             `preds` (`torch.Tensor`): The predictions for this metric calculation.
@@ -326,10 +323,7 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         # We start by logging the losses.
         if self.metrics_config.do_log(split, MetricCategories.LOSS_PARTS):
             self.log_dict(
-                {
-                    f"{split}_{k}_cls_NLL": v
-                    for k, v in results["losses"]["classification"].items()
-                },
+                {f"{split}_{k}_cls_NLL": v for k, v in results["losses"]["classification"].items()},
                 **log_kwargs,
             )
             self.log_dict(
@@ -344,14 +338,7 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
 
         # Per data type
         for measurement, metrics_dict in self.metrics.items():
-            if (results["event_type_mask_per_measurement"] is None) or (
-                measurement not in results["event_type_mask_per_measurement"]
-            ):
-                mask = results["event_mask"]
-            else:
-                mask = (
-                    results["event_mask"] & results["event_type_mask_per_measurement"][measurement]
-                )
+            mask = results["event_mask"]
 
             if not mask.any():
                 continue
@@ -360,7 +347,9 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                 if task_type in self.CLASSIFICATION and self.metrics_config.do_log(
                     split, MetricCategories.CLASSIFICATION
                 ):
-                    preds = results["preds"]["classification"][measurement].logits
+                    # For now, we ignore the is_observed distribution (the first element of the below tuple).
+                    _, sample_dist = results["preds"]["classification"][measurement]
+                    preds = sample_dist.logits
                     labels = results["labels"]["classification"][measurement]
 
                     # We need to filter these down to just those corresponding to observed events. Note that
@@ -380,9 +369,8 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                         cat=MetricCategories.CLASSIFICATION,
                     )
 
-                elif (
-                    task_type == DataModality.MULTIVARIATE_REGRESSION
-                    and self.metrics_config.do_log(split, MetricCategories.REGRESSION)
+                elif task_type == DataModality.MULTIVARIATE_REGRESSION and self.metrics_config.do_log(
+                    split, MetricCategories.REGRESSION
                 ):
                     vocab_size = self.config.vocab_sizes_by_measurement[measurement]
 
@@ -421,16 +409,16 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                         split=split,
                         cat=MetricCategories.REGRESSION,
                     )
-                elif (
-                    task_type == DataModality.UNIVARIATE_REGRESSION
-                    and self.metrics_config.do_log(split, MetricCategories.REGRESSION)
+                elif task_type == DataModality.UNIVARIATE_REGRESSION and self.metrics_config.do_log(
+                    split, MetricCategories.REGRESSION
                 ):
                     # Here, like for TTE, we need to sample from the returned distribution before we can use
                     # it directly. Here we also need to limit to just those events that are actually observed.
                     # Like above, the assumption here is that preds and labels correspond to predictions for
                     # and labels of the events at their indexed position; not for the subsequent event. So we
                     # don't need to shift `results['event_mask']` here to account for that.
-                    dist = results["preds"]["regression"][measurement]
+                    # We ignore the is observed distribution here.
+                    _, dist = results["preds"]["regression"][measurement]
                     preds = dist.sample()[mask]
                     labels = results["labels"]["regression"][measurement][mask]
 
@@ -472,10 +460,9 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
     def configure_optimizers(self):
         """Configures optimizer and learning rate scheduler.
 
-        Currently this module uses the AdamW optimizer, with configurable weight_decay, with a
-        learning rate warming up from 0 on a per-step manner to the configurable
-        `self.optimization_config.init_lr`, then undergoes polynomial decay as specified via
-        `self.optimization_config`.
+        Currently this module uses the AdamW optimizer, with configurable weight_decay, with a learning rate
+        warming up from 0 on a per-step manner to the configurable `self.optimization_config.init_lr`, then
+        undergoes polynomial decay as specified via `self.optimization_config`.
         """
         opt = torch.optim.AdamW(
             self.model.parameters(),
@@ -504,15 +491,14 @@ SKIP_CFG_PARAMS = {"seq_attention_layers", "dep_graph_attention_layers"}
 @hydra_dataclass
 class PretrainConfig:
     do_overwrite: bool = False
+    seed: int = 1
 
     config: dict[str, Any] = dataclasses.field(
         default_factory=lambda: {
             "_target_": "EventStream.transformer.config.StructuredTransformerConfig",
             **{
                 k: v
-                for k, v in StructuredTransformerConfig(measurements_per_dep_graph_level=[])
-                .to_dict()
-                .items()
+                for k, v in StructuredTransformerConfig(measurements_per_dep_graph_level=[]).to_dict().items()
                 if k not in SKIP_CFG_PARAMS
             },
         }
@@ -561,19 +547,22 @@ class PretrainConfig:
         if type(self.save_dir) is str and self.save_dir != omegaconf.MISSING:
             self.save_dir = Path(self.save_dir)
         if "max_epochs" in self.trainer_config:
-            raise ValueError(
-                "Max epochs is set in the optimization_config, not the trainer config!"
-            )
+            raise ValueError("Max epochs is set in the optimization_config, not the trainer config!")
         if "callbacks" in self.trainer_config:
             raise ValueError("Callbacks are built internally, not set via trainer_config!")
 
 
 @task_wrapper
 def train(cfg: PretrainConfig):
-    """Runs the end to end training procedure for the ESTForGenerativeSequenceModelingLM model.
+    """Runs the end to end training procedure for the pre-training model.
 
-    Args: TODO
+    Args:
+        cfg: The pre-training config defining the generative modeling task.
     """
+
+    L.seed_everything(cfg.seed)
+    torch.multiprocessing.set_sharing_strategy("file_system")
+
     train_pyd = PytorchDataset(cfg.data_config, split="train")
     tuning_pyd = PytorchDataset(cfg.data_config, split="tuning")
 
@@ -605,8 +594,6 @@ def train(cfg: PretrainConfig):
         cfg.final_validation_metrics_config.to_json_file(
             cfg.save_dir / "final_validation_metrics_config.json", do_overwrite=cfg.do_overwrite
         )
-
-    torch.multiprocessing.set_sharing_strategy("file_system")
 
     # Model
     LM = ESTForGenerativeSequenceModelingLM(

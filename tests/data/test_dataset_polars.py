@@ -22,7 +22,7 @@ from EventStream.data.types import (
 )
 from EventStream.data.vocabulary import Vocabulary
 
-from ..mixins import ConfigComparisonsMixin
+from ..utils import ConfigComparisonsMixin
 
 
 class NormalizerMock(Preprocessor):
@@ -77,9 +77,7 @@ class AgeFunctorMock(TimeDependentFunctor):
         return None
 
     def pl_expr(self):
-        return (
-            (pl.col("timestamp") - pl.col(DOB_COL)).dt.nanoseconds() / 1e9 / 60 / 60 / 24 / 365.25
-        )
+        return (pl.col("timestamp") - pl.col(DOB_COL)).dt.nanoseconds() / 1e9 / 60 / 60 / 24 / 365.25
 
 
 class TimeOfDayFunctorMock(TimeDependentFunctor):
@@ -104,7 +102,7 @@ MeasurementConfig.FUNCTORS["AgeFunctorMock"] = AgeFunctorMock
 MeasurementConfig.FUNCTORS["TimeOfDayFunctorMock"] = TimeOfDayFunctorMock
 
 TEST_CONFIG = DatasetConfig(
-    min_valid_column_observations=0.5,
+    min_valid_column_observations=1 / 9,
     min_valid_vocab_element_observations=2,
     min_true_float_frequency=1 / 2,
     min_unique_numerical_observations=0.99,
@@ -112,23 +110,19 @@ TEST_CONFIG = DatasetConfig(
     normalizer_config={"cls": "normalizer"},
     agg_by_time_scale=None,
     measurement_configs={
-        "pre_dropped": MeasurementConfig(
-            temporality=TemporalityType.DYNAMIC, modality=DataModality.DROPPED
-        ),
+        "pre_dropped": MeasurementConfig(temporality=TemporalityType.DYNAMIC, modality=DataModality.DROPPED),
         "not_present_dropped": MeasurementConfig(
             temporality=TemporalityType.DYNAMIC,
-            modality=DataModality.SINGLE_LABEL_CLASSIFICATION,
+            modality=DataModality.MULTI_LABEL_CLASSIFICATION,
         ),
         "dynamic_preset_vocab": MeasurementConfig(
             temporality=TemporalityType.DYNAMIC,
             modality=DataModality.MULTI_LABEL_CLASSIFICATION,
-            present_in_event_types=["DPV"],
             vocabulary=Vocabulary(["bar", "foo"], [1, 2]),
         ),
         "dynamic_dropped_insufficient_occurrences": MeasurementConfig(
             temporality=TemporalityType.DYNAMIC,
-            modality=DataModality.SINGLE_LABEL_CLASSIFICATION,
-            present_in_event_types=["DDIC"],
+            modality=DataModality.MULTI_LABEL_CLASSIFICATION,
         ),
         "static": MeasurementConfig(
             temporality=TemporalityType.STATIC,
@@ -157,7 +151,6 @@ TEST_CONFIG = DatasetConfig(
             temporality=TemporalityType.DYNAMIC,
             modality=DataModality.MULTIVARIATE_REGRESSION,
             values_column="mrbo_vals",
-            present_in_event_types=["MVR"],
             _measurement_metadata=pd.DataFrame(
                 {
                     "drop_lower_bound": [-1.1, -10.1, None],
@@ -167,16 +160,13 @@ TEST_CONFIG = DatasetConfig(
                     "censor_lower_bound": [None, -5.1, -10.1],
                     "censor_upper_bound": [0.6, 10.1, None],
                 },
-                index=pd.Index(
-                    ["mrbo1", "mrbo2", "mrbo3"], name="multivariate_regression_bounded_outliers"
-                ),
+                index=pd.Index(["mrbo1", "mrbo2", "mrbo3"], name="multivariate_regression_bounded_outliers"),
             ),
         ),
         "multivariate_regression_preset_value_type": MeasurementConfig(
             temporality=TemporalityType.DYNAMIC,
             modality=DataModality.MULTIVARIATE_REGRESSION,
             values_column="pvt_vals",
-            present_in_event_types=["MVR"],
             _measurement_metadata=pd.DataFrame(
                 {
                     "value_type": [
@@ -197,7 +187,6 @@ TEST_CONFIG = DatasetConfig(
             temporality=TemporalityType.DYNAMIC,
             modality=DataModality.MULTIVARIATE_REGRESSION,
             values_column="mrnp_vals",
-            present_in_event_types=["MVR"],
         ),
     },
 )
@@ -256,9 +245,7 @@ want_event_agg_mapping = {
     13: (15,),
 }
 
-want_event_times = {
-    want_id: in_event_times[in_ids[0]] for want_id, in_ids in want_event_agg_mapping.items()
-}
+want_event_times = {want_id: in_event_times[in_ids[0]] for want_id, in_ids in want_event_agg_mapping.items()}
 want_event_TODs = {
     k: "EARLY_AM" if v.hour < 6 else "UNK" if v.hour < 12 else "PM" if v.hour < 21 else "LATE_PM"
     for k, v in want_event_times.items()
@@ -302,13 +289,10 @@ normalizer_min_lt_90 = inliers_lt_90.min()
 normalizer_min_all = inliers_all.min()
 
 want_events_ts_ages_lt_90_is_inlier = {
-    k: None if (v > 90) else bool(v - outlier_mean_lt_90 < 10)
-    for k, v in want_event_ts_ages.items()
+    k: None if (v > 90) else bool(v - outlier_mean_lt_90 < 10) for k, v in want_event_ts_ages.items()
 }
 want_events_ts_ages_lt_90 = {
-    k: (v - normalizer_min_lt_90.round())
-    if (v < 90) and want_events_ts_ages_lt_90_is_inlier[k]
-    else np.NaN
+    k: (v - normalizer_min_lt_90.round()) if (v < 90) and want_events_ts_ages_lt_90_is_inlier[k] else np.NaN
     for k, v in want_event_ts_ages.items()
 }
 want_events_ts_ages_all_is_inlier = {
@@ -616,16 +600,14 @@ WANT_INFERRED_MEASUREMENT_CONFIGS = {
         name="dynamic_preset_vocab",
         temporality=TemporalityType.DYNAMIC,
         modality=DataModality.MULTI_LABEL_CLASSIFICATION,
-        present_in_event_types=["DPV"],
         vocabulary=Vocabulary(["UNK", "foo", "bar"], [0, 2 / 3, 1 / 3]),
-        observation_frequency=1,
+        observation_frequency=5 / 9,
     ),
     "dynamic_dropped_insufficient_occurrences": MeasurementConfig(
         name="dynamic_dropped_insufficient_occurrences",
         temporality=TemporalityType.DYNAMIC,
         modality=DataModality.DROPPED,
-        present_in_event_types=["DDIC"],
-        observation_frequency=0.5,
+        observation_frequency=1 / 9,
     ),
     "static": MeasurementConfig(
         name="static",
@@ -700,7 +682,6 @@ WANT_INFERRED_MEASUREMENT_CONFIGS = {
         temporality=TemporalityType.DYNAMIC,
         modality=DataModality.MULTIVARIATE_REGRESSION,
         values_column="mrbo_vals",
-        present_in_event_types=["MVR"],
         _measurement_metadata=pd.DataFrame(
             {
                 "drop_lower_bound": [-1.1, -10.1, None],
@@ -729,7 +710,7 @@ WANT_INFERRED_MEASUREMENT_CONFIGS = {
                 ["mrbo1", "mrbo2", "mrbo3"], name="multivariate_regression_bounded_outliers"
             ),
         ),
-        observation_frequency=1,
+        observation_frequency=2 / 9,
         vocabulary=Vocabulary(["UNK", "mrbo1", "mrbo2", "mrbo3"], [0, 1, 1, 1]),
     ),
     "multivariate_regression_preset_value_type": MeasurementConfig(
@@ -737,7 +718,6 @@ WANT_INFERRED_MEASUREMENT_CONFIGS = {
         temporality=TemporalityType.DYNAMIC,
         modality=DataModality.MULTIVARIATE_REGRESSION,
         values_column="pvt_vals",
-        present_in_event_types=["MVR"],
         _measurement_metadata=pd.DataFrame(
             {
                 "value_type": [
@@ -770,7 +750,7 @@ WANT_INFERRED_MEASUREMENT_CONFIGS = {
                 name="multivariate_regression_preset_value_type",
             ),
         ),
-        observation_frequency=1,
+        observation_frequency=2 / 9,
         vocabulary=Vocabulary(
             [
                 "UNK",
@@ -791,8 +771,7 @@ WANT_INFERRED_MEASUREMENT_CONFIGS = {
         temporality=TemporalityType.DYNAMIC,
         modality=DataModality.MULTIVARIATE_REGRESSION,
         values_column="mrnp_vals",
-        present_in_event_types=["MVR"],
-        observation_frequency=1,
+        observation_frequency=2 / 9,
         vocabulary=Vocabulary(
             [
                 "UNK",
@@ -892,12 +871,8 @@ WANT_EVENTS_DF = pl.DataFrame(
         "timestamp": [want_event_times[i] for i in range(1, 14)],
         "time_dependent_age_lt_90": [want_events_ts_ages_lt_90[i] for i in range(1, 14)],
         "time_dependent_age_all": [want_events_ts_ages_all[i] for i in range(1, 14)],
-        "time_dependent_age_lt_90_is_inlier": [
-            want_events_ts_ages_lt_90_is_inlier[i] for i in range(1, 14)
-        ],
-        "time_dependent_age_all_is_inlier": [
-            want_events_ts_ages_all_is_inlier[i] for i in range(1, 14)
-        ],
+        "time_dependent_age_lt_90_is_inlier": [want_events_ts_ages_lt_90_is_inlier[i] for i in range(1, 14)],
+        "time_dependent_age_all_is_inlier": [want_events_ts_ages_all_is_inlier[i] for i in range(1, 14)],
         "time_dependent_time_of_day": [want_event_TODs[i] for i in range(1, 14)],
     },
     schema={
@@ -1234,300 +1209,154 @@ WANT_DL_REP_DF = pl.DataFrame(
             [
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["MVR"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[1]
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo1"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_dropped"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
-                        "pvt_int"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo3"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_flt"
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[1]],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo1"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_dropped"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"]["pvt_int"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo3"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_flt"],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
                         "pvt_cat_int__EQ_2"
                     ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo2"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_flt"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
-                        "pvt_added"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo1"
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo2"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_flt"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"]["pvt_added"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo1"],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["UNK"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
-                        "pvt_flt"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo2"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_int"
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"]["pvt_flt"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo2"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_int"],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
                         "pvt_cat_int__EQ_1"
                     ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo1"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_int"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
-                        "pvt_drp"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo3"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_cat_int__EQ_1"
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo1"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_int"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"]["pvt_drp"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo3"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_cat_int__EQ_1"],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
                         "pvt_cat_flt__EQ_1.0"
                     ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo2"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_cat_int__EQ_1"
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo2"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_cat_int__EQ_1"],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
                         "pvt_cat_int__EQ_2"
                     ],
                 ],
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DDIC"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[2]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[2]],
                 ],
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DPV"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[3]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[3]],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["dynamic_preset_vocab"]["foo"],
                 ],
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DPV"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[4]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[4]],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["dynamic_preset_vocab"]["foo"],
                 ],
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DPV"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[5]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[5]],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["dynamic_preset_vocab"]["bar"],
                 ],
             ],
             [
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["MVR"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[6]
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo3"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_cat_int__EQ_2"
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[6]],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo3"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_cat_int__EQ_2"],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
                         "pvt_cat_flt__EQ_1.0"
                     ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo2"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_cat_int__EQ_2"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
-                        "pvt_int"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo1"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_cat_int__EQ_3"
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo2"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_cat_int__EQ_2"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"]["pvt_int"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo1"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_cat_int__EQ_3"],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
                         "pvt_cat_int__EQ_1"
                     ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"][
-                        "mrbo3"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_cat_int__EQ_3"
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_bounded_outliers"]["mrbo3"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_cat_int__EQ_3"],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
                         "pvt_cat_flt__EQ_2.0"
                     ],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["UNK"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
-                        "pvt_drp"
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"]["pvt_drp"],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["UNK"],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
                         "pvt_cat_flt__EQ_2.0"
                     ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_flt"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
-                        "pvt_flt"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_dropped"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"][
-                        "pvt_added"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"][
-                        "mrnp_int"
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_flt"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"]["pvt_flt"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_dropped"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_preset_value_type"]["pvt_added"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["multivariate_regression_no_preset"]["mrnp_int"],
                 ],
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DDIC"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[7]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[7]],
                 ],
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DPV"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[8]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[8]],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["dynamic_preset_vocab"]["bar"],
                 ],
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DPV"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[9]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[9]],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["dynamic_preset_vocab"]["bar"],
                 ],
             ],
             [
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DPV"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[10]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[10]],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["dynamic_preset_vocab"]["UNK"],
                 ],
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DPV"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[11]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[11]],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["dynamic_preset_vocab"]["UNK"],
                 ],
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DPV"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[12]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[12]],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["dynamic_preset_vocab"]["foo"],
                 ],
                 [
                     WANT_UNIFIED_VOCABULARY_IDXMAP["event_type"]["DPV"],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"][
-                        "time_dependent_age_all"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"][
-                        "time_dependent_age_lt_90"
-                    ],
-                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][
-                        want_event_TODs[13]
-                    ],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_all"]["time_dependent_age_all"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_age_lt_90"]["time_dependent_age_lt_90"],
+                    WANT_UNIFIED_VOCABULARY_IDXMAP["time_dependent_time_of_day"][want_event_TODs[13]],
                     WANT_UNIFIED_VOCABULARY_IDXMAP["dynamic_preset_vocab"]["foo"],
                 ],
             ],
@@ -1856,7 +1685,7 @@ class TestDatasetEndToEnd(ConfigComparisonsMixin, unittest.TestCase):
 
         E.split_subjects = TEST_SPLIT
 
-        E.preprocess_measurements()
+        E.preprocess()
 
         self.assertNestedDictEqual(
             WANT_INFERRED_MEASUREMENT_CONFIGS, E.inferred_measurement_configs, check_like=True
@@ -1873,9 +1702,7 @@ class TestDatasetEndToEnd(ConfigComparisonsMixin, unittest.TestCase):
         got_DL_rep = E.build_DL_cached_representation(do_sort_outputs=True)
         self.assertEqual(WANT_DL_REP_DF.drop("dynamic_values"), got_DL_rep.drop("dynamic_values"))
 
-        exploded_expr = (
-            pl.col("dynamic_values").arr.explode().arr.explode().alias("dynamic_values")
-        )
+        exploded_expr = pl.col("dynamic_values").arr.explode().arr.explode().alias("dynamic_values")
         want_expl = WANT_DL_REP_DF.select(exploded_expr)
         got_expl = got_DL_rep.select(exploded_expr)
 
@@ -1885,9 +1712,9 @@ class TestDatasetEndToEnd(ConfigComparisonsMixin, unittest.TestCase):
             with TemporaryDirectory() as d:
                 save_dir = Path(d) / "save_dir"
                 E.config.save_dir = save_dir
-                E._save()
+                E.save()
 
-                got_E = Dataset._load(save_dir)
+                got_E = Dataset.load(save_dir)
 
                 self.assertEqual(WANT_MEASUREMENTS_DF, got_E.dynamic_measurements_df)
                 self.assertEqual(WANT_EVENTS_DF, got_E.events_df)
