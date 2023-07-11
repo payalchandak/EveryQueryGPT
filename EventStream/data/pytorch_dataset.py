@@ -210,14 +210,14 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         self.seq_padding_side = config.seq_padding_side
         self.max_seq_len = config.max_seq_len
 
-        length_constraint = pl.col("dynamic_indices").arr.lengths() >= config.min_seq_len
+        length_constraint = pl.col("dynamic_indices").list.lengths() >= config.min_seq_len
         self.cached_data = self.cached_data.filter(length_constraint)
 
         if "time_delta" not in self.cached_data.columns:
             self.cached_data = self.cached_data.with_columns(
-                (pl.col("start_time") + pl.duration(minutes=pl.col("time").arr.first())).alias("start_time"),
+                (pl.col("start_time") + pl.duration(minutes=pl.col("time").list.first())).alias("start_time"),
                 pl.col("time")
-                .arr.eval(
+                .list.eval(
                     # We fill with 1 here as it will be ignored in the code anyways as the next event's
                     # event mask will be null.
                     # TODO(mmd): validate this in a test.
@@ -237,7 +237,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         )
 
         if stats["min"].item() <= 0:
-            bad_inter_event_times = self.cached_data.filter(pl.col("time_delta").arr.min() <= 0).collect()
+            bad_inter_event_times = self.cached_data.filter(pl.col("time_delta").list.min() <= 0).collect()
             bad_subject_ids = [str(x) for x in list(bad_inter_event_times["subject_id"])]
             warning_strs = [
                 f"WARNING: Observed inter-event times <= 0 for {len(bad_inter_event_times)} subjects!",
@@ -252,7 +252,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
 
             print("\n".join(warning_strs))
 
-            self.cached_data = self.cached_data.filter(pl.col("time_delta").arr.min() > 0)
+            self.cached_data = self.cached_data.filter(pl.col("time_delta").list.min() > 0)
 
         self.mean_log_inter_event_time_min = stats["mean_log"].item()
         self.std_log_inter_event_time_min = stats["std_log"].item()
@@ -274,6 +274,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             self.cached_data = self.cached_data.sample(seed=self.config.train_subset_seed, **kwargs)
 
         with self._time_as("convert_to_rows"):
+            self.subject_ids = self.cached_data["subject_id"].to_list()
             self.cached_data = self.cached_data.drop("subject_id")
             self.columns = self.cached_data.columns
             self.cached_data = self.cached_data.rows()
@@ -319,8 +320,8 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         elif "time_delta" in self.cached_data.columns:
             time_col_expr = pl.col("time_delta").cumsum().over("subject_id")
 
-        start_idx_expr = time_col_expr.arr.explode().search_sorted(pl.col("start_time_min").first())
-        end_idx_expr = time_col_expr.arr.explode().search_sorted(pl.col("end_time_min").first())
+        start_idx_expr = time_col_expr.list.explode().search_sorted(pl.col("start_time_min").first())
+        end_idx_expr = time_col_expr.list.explode().search_sorted(pl.col("end_time_min").first())
 
         self.cached_data = (
             self.cached_data.join(task_df, on="subject_id", how="inner", suffix="_task")
@@ -335,7 +336,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
                 **{c: pl.col(c).first() for c in self.cached_data.columns if c not in time_dep_cols},
                 **{c: pl.col(c).first() for c in self.tasks},
                 **{
-                    t: pl.col(t).arr.explode().slice(start_idx_expr, end_idx_expr - start_idx_expr)
+                    t: pl.col(t).list.explode().slice(start_idx_expr, end_idx_expr - start_idx_expr)
                     for t in time_dep_cols
                 },
             )
@@ -393,6 +394,8 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
 
         full_subj_data = {c: v for c, v in zip(self.columns, self.cached_data[idx])}
         if self.config.do_include_start_time_min:
+            # Note that this is using the python datetime module's `timestamp` function which differs from
+            # some dataframe libraries' timestamp functions (e.g., polars).
             full_subj_data["start_time"] = full_subj_data["start_time"].timestamp() / 60.0
         else:
             full_subj_data.pop("start_time")
@@ -414,6 +417,9 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
                         raise ValueError(
                             f"Invalid sampling strategy: {self.config.subsequence_sampling_strategy}!"
                         )
+
+                if self.config.do_include_start_time_min:
+                    full_subj_data["start_time"] += sum(full_subj_data["time_delta"][:start_idx])
 
                 for k in (
                     "time_delta",
