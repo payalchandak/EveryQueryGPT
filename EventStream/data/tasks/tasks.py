@@ -12,13 +12,88 @@ from omegaconf import DictConfig, OmegaConf
 
 from .dataset_polars import Dataset
 
+from .config import *
 
-@dataclasses.dataclass
-class TaskConfig:
-    temp: str
+def query_task_DAG(events_df: pl.DataFrame, task_dag) -> pl.DataFrame:
+    exprs = {}
+    nodes, relations = task_dag
+    parents = {}
 
-    def merge(self, other: TaskConfig) -> "TaskConfig":
-        raise NotImplementedError
+    exprs_to_run = {}
+
+    for node, children in relations:
+        if type(exprs[node]) is pl.Expr:
+            if node in parents:
+                valid_expr = exprs[node] & (pl.col('timestamp') >= exprs[parents[node]])
+            else:
+                valid_expr = exprs[node]
+
+            exprs[node] = pl.when(valid_expr, pl.col('timestamp'), pl.lit(None))
+        else:
+            exprs[node] = dereference(node, exprs)
+        for child in children: parents[child] = node
+
+
+
+nsample_task_nodes = {
+    "trigger.event": pl.col('admission')
+    "gap.start": "${trigger.event}"
+    "gap.end": "${trigger.event} + 2d"
+    "input.end": "${trigger.event} + 1d"
+    "target.start": "${gap.end}"
+    "target.end": pl.col('discharge') | pl.col('death')
+}
+
+sample_task_DAG = [
+    ("trigger.event", ["gap.start", "input.end"]),
+    ("input.end", [])
+    ("gap.start", ["gap.end"]),
+    ("gap.end", ["target.start"]),
+    ("target.start", ["target.end"]),
+    ("target.end", [])
+]
+
+def query_dataset(D: Dataset, T: TaskConfig) -> pl.DataFrame:
+    # 1. Get the event predicates
+    root_event_predicates = T.get_event_predicates()
+    root_event_value_fns = T.get_event_value_fns()
+
+    # 2. Get the static variables needed
+    static_variables = T.get_static_variables()
+
+    # 3. Select events, subject_IDs, and timestamps
+    static_df = D.subjects_df.lazy().select("subject_id", *static_variables)
+
+    event_predicates_df = (
+        D.dynamic_measurements_df
+        .lazy()
+        .join(D.events_df.lazy().select("event_id", "event_type"), on="event_id")
+        .group_by("event_id")
+        .agg(**root_event_predicates, **root_event_value_fns)
+    )
+
+    events_df = (
+        D.events_df.lazy()
+        .join(static_df, on='subject_id', how='inner')
+        .join(event_predicates_df, on='event_id', how='inner')
+        .select(
+            'subject_id', *static_variables, 'timestamp',
+            *root_event_predicates.keys(), *root_event_value_fns.keys()
+        )
+    )
+
+    # Fit event windows
+    #window_endpoint_DAG = T.get_window_endpoint_DAG()
+    window_timepoints_values, window_valid = T.get_query()
+    events_df = (
+        events_df
+        .with_column(**window_timepoints_values)
+        .filter(window_valid)
+    )
+
+
+
+
 
 
 def parse_task_cfg(task_cfg: DictConfig) -> dict[str, TaskConfig] | TaskConfig:
@@ -77,16 +152,12 @@ def main(cfg: DictConfig):
     measurement_configs = {}
 
     if TemporalityType.FUNCTIONAL_TIME_DEPENDENT in measurements_by_temporality:
-        time_dep_measurements = measurements_by_temporality.pop(
-            TemporalityType.FUNCTIONAL_TIME_DEPENDENT
-        )
+        time_dep_measurements = measurements_by_temporality.pop(TemporalityType.FUNCTIONAL_TIME_DEPENDENT)
     else:
         time_dep_measurements = {}
 
     for temporality, measurements_by_modality in measurements_by_temporality.items():
-        schema_source = (
-            static_sources if temporality == TemporalityType.STATIC else dynamic_sources
-        )
+        schema_source = static_sources if temporality == TemporalityType.STATIC else dynamic_sources
         for modality, measurements_by_source in measurements_by_modality.items():
             if not measurements_by_source:
                 continue
@@ -123,9 +194,7 @@ def main(cfg: DictConfig):
                         case str(), DataModality.MULTI_LABEL_CLASSIFICATION:
                             add_to_container(m, InputDataType.CATEGORICAL, data_schema)
                         case _:
-                            raise ValueError(
-                                f"{m}, {modality} invalid! Must be in {DataModality.values()}!"
-                            )
+                            raise ValueError(f"{m}, {modality} invalid! Must be in {DataModality.values()}!")
 
                     if m in measurement_configs:
                         if measurement_configs[m].to_dict() != measurement_config_kwargs:
@@ -165,10 +234,7 @@ def main(cfg: DictConfig):
 
                 static_col_schema[schema_key] = schema_val
 
-        if (
-            m in measurement_configs
-            and measurement_configs[m].to_dict() != measurement_config_kwargs
-        ):
+        if m in measurement_configs and measurement_configs[m].to_dict() != measurement_config_kwargs:
             raise ValueError(f"{m} differs across input sources!")
         measurement_configs[m] = MeasurementConfig(**measurement_config_kwargs)
 
@@ -193,12 +259,8 @@ def main(cfg: DictConfig):
             match source_schema["query"]:
                 case str() as query_str:
                     if not connection_uri:
-                        raise ValueError(
-                            "If providing a query string, must provide a connection_uri!"
-                        )
-                    input_schema_kwargs["input_df"] = Query(
-                        query=query_str, connection_uri=connection_uri
-                    )
+                        raise ValueError("If providing a query string, must provide a connection_uri!")
+                    input_schema_kwargs["input_df"] = Query(query=query_str, connection_uri=connection_uri)
                 case dict() as query_kwargs:
                     if "connection_uri" not in query_kwargs:
                         query_kwargs["connection_uri"] = connection_uri
@@ -229,10 +291,7 @@ def main(cfg: DictConfig):
         else:
             input_schema_kwargs["type"] = InputDFType.STATIC
 
-        if (
-            input_schema_kwargs["type"] != InputDFType.STATIC
-            and "event_type" not in input_schema_kwargs
-        ):
+        if input_schema_kwargs["type"] != InputDFType.STATIC and "event_type" not in input_schema_kwargs:
             input_schema_kwargs["event_type"] = inflect.singular_noun(schema_name).upper()
 
         cols_covered = []
@@ -330,9 +389,7 @@ def main(cfg: DictConfig):
     config = DatasetConfig(measurement_configs=measurement_configs, **config_kwargs)
 
     if config.save_dir is not None:
-        dataset_schema.to_json_file(
-            config.save_dir / "input_schema.json", do_overwrite=do_overwrite
-        )
+        dataset_schema.to_json_file(config.save_dir / "input_schema.json", do_overwrite=do_overwrite)
 
     ESD = Dataset(config=config, input_schema=dataset_schema)
     ESD.split(split, seed=seed)

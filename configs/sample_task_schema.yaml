@@ -1,0 +1,138 @@
+# 1. Abnormal Lab Value Prediction
+
+Concepts:
+  event: predicate function that produces an event
+  window:
+    start:
+    end:
+    filters:
+  prediction_task:
+    time_until: # Predict time until something
+    label: # Predict a categorical label
+    value: # Predict a regression value
+  cohort: # the base set of patients over whom are searched.
+
+
+# Long Version:
+in_hospital_mortality:
+  # Can define a set of event predicates relevant to the task.
+  events:
+    admission:
+      has:
+        event_type: "ADMISSION"
+    discharge:
+      has:
+        event_type: "DISCHARGE"
+    death:
+      has:
+        event_type: "DEATH"
+
+  # Can define a set of task parameters that will dictate final task path. The system will iterate over all
+  # cross products of these parameters to define final task, if they are used.
+  gap_time: 24h
+  first: [24h, 48h]
+
+  # Defines the task name, which will also dictate storage path.
+  name: "first_${first}/gap_{gap_time}"
+
+  trigger:
+    event: admission
+  gap:
+    start: trigger.end # this is the default
+    end: input.end + ${gap_time}
+    excludes: [admission, discharge, death]
+  input:
+    end: trigger.end + ${first}
+    duration:
+      min:
+        time: "30d"
+  target:
+    start: gap.end # this is the default
+    end:
+      any: [discharge, death]
+      inclusive: True
+  label:
+    target:
+      includes: [death]
+
+# Short Version:
+in_hospital_mortality:
+  # Can define a set of event predicates relevant to the task.
+  events:
+    admission.has.event_type: "ADMISSION"
+    discharge.has.event_type: "DISCHARGE"
+    death.has.event_type: "DEATH"
+
+  # Can define a set of task parameters that will dictate final task path. The system will iterate over all
+  # cross products of these parameters to define final task, if they are used.
+  gap_time: 24h
+  first: [24h, 48h]
+
+  # Defines the task name, which will also dictate storage path.
+  name: "first_${first}/gap_{gap_time}"
+
+  trigger.event: admission
+  gap:
+    end: input.end + ${gap_time}
+    excludes: [admission, discharge, death]
+  input:
+    end: trigger.end + ${first}
+    duration.min.time: "30d"
+  target.end:
+    any: [discharge, death]
+    inclusive: True
+  # Label top-level properties default to being about the target window.
+  label.includes: [death]
+
+# Potassium will-be-measured prediction and conditional abnormal value prediction
+potassium_status:
+  events.potassium_measurement.has:
+    event_type: "LAB_MEASUREMENT"
+    test_name: 
+      id: "K"
+      value.bounds: [[low, normal, high], [4, 10]]
+    # Equivalent
+    #low.has.test_name.value: [null, 4]
+    #normal.has.test_name.value: [4, 10]
+    #high.has.test_name.value: [10, null]
+    # Yields events potassium_measurement.low, potassium_measurement.normal, etc.
+
+  gap_time: 7d
+  target_duration: 3d
+
+  # The default trigger will fire on any event in the record.
+  # The default input window starts at null and ends at trigger.end
+  gap:
+    end: trigger.event + ${gap_time}
+    excludes: [potassium]
+  target.end: start + ${target_duration}
+
+  will_be_measured:
+    label.includes: potassium
+
+  conditional_abnormal:
+    target.includes: [potassium]
+    label.first.event: potassium
+
+  value:
+    target.includes: [potassium]
+    label.regression:
+      event: potassium
+      fn: [value, average]
+
+# Intervention weaning
+ventilation_weaning_time:
+  events.ventilation.has:
+    event_type: "INTERVENTION"
+    name: null # this eliminates the base "events.ventilation" from being usable.
+    on.test_name: "VENT_ON"
+    off.test_name: "VENT_OFF"
+
+  trigger.on: ventilation.on
+  target:
+    end: ventilation.off
+    excludes: ventilation.on
+    inclusive: False
+
+  label:
+    time_to_event: target.end
