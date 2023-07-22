@@ -27,22 +27,12 @@ in_hospital_mortality:
       has:
         event_type: "DEATH"
 
-  # Can define a set of task parameters that will dictate final task path. The system will iterate over all
-  # cross products of these parameters to define final task, if they are used.
-  gap_time: 24h
-  first: [24h, 48h]
-
-  # Defines the task name, which will also dictate storage path.
-  name: "first_${first}/gap_{gap_time}"
-
   trigger:
     event: admission
-  gap:
+  constraints.gap:
     start: trigger.end # this is the default
-    end: input.end + ${gap_time}
     excludes: [admission, discharge, death]
   input:
-    end: trigger.end + ${first}
     duration:
       min:
         time: "30d"
@@ -54,6 +44,15 @@ in_hospital_mortality:
   label:
     target:
       includes: [death]
+
+  24h_in_24h_gap:
+    gap.end: gap.start + 48h
+    input.end: trigger.end + 24h
+
+  48h_in_24h_gap:
+    gap.end: gap.start + 48h
+    input.end: trigger.end + 48h
+
 
 # Short Version:
 in_hospital_mortality:
@@ -88,7 +87,7 @@ in_hospital_mortality:
 potassium_status:
   events.potassium_measurement.has:
     event_type: "LAB_MEASUREMENT"
-    test_name: 
+    test_name:
       id: "K"
       value.bounds: [[low, normal, high], [4, 10]]
     # Equivalent
