@@ -1,3 +1,8 @@
+"""Config manipulation utilities for specifying tasks.
+
+Will be re-organized prior to final merge.
+"""
+
 import copy
 from typing import Any
 
