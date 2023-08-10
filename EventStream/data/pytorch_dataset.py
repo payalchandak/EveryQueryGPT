@@ -6,6 +6,7 @@ import numpy as np
 import polars as pl
 import torch
 from mixins import SaveableMixin, SeedableMixin, TimeableMixin
+from tqdm.auto import tqdm
 
 from .config import (
     MeasurementConfig,
@@ -307,6 +308,28 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             self.cached_data = self.cached_data.drop("subject_id")
             self.columns = self.cached_data.columns
             self.cached_data = self.cached_data.rows()
+
+        if not config.do_pre_cache_items:
+            return
+
+        if config.n_samples_per_subject is None:
+            config.n_samples_per_subject = 1
+
+        if config.seed is None:
+            print("Setting pre-caching seed to 1")
+            config.seed = 1
+
+        self.config.save_dir / "DL_reps" / "pre_cached" / self.config.pre_cached_dir_name
+
+        self._seed("Pre-caching Data", config.seed)
+
+        # Pre-cache samples
+        with self._time_as("pre-cache samples"):
+            samples = defaultdict(list)
+            for n in tqdm(list(range(config.n_samples_per_subject)), desc="Sampling", leave=False):
+                for i in tqdm(list(range(len(self))), desc="Pre-caching Subject", leave=False):
+                    for k, v in self[i]:
+                        samples[k].append(v)
 
     @staticmethod
     def _build_task_cached_df(task_df: pl.LazyFrame, cached_data: pl.LazyFrame) -> pl.LazyFrame:

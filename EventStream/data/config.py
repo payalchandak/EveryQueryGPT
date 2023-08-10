@@ -675,6 +675,9 @@ class PytorchDatasetConfig(JSONableMixin):
         do_include_start_time_min: Whether or not to include the start time of the individual's sequence in
             minutes since the epoch (1/1/1970) in the output data. This is necessary during generation, and
             not used anywhere else currently.
+        n_samples_per_subject: How many sampled sub-sequences per subject should be initialized and
+            cached to disk?
+        seed: What seed should be used when pre-sampling subsequences per subject
 
     Raises:
         ValueError: If 'seq_padding_side' is not a valid value; If 'min_seq_len' is not a non-negative
@@ -745,6 +748,30 @@ class PytorchDatasetConfig(JSONableMixin):
     do_include_subsequence_indices: bool = False
     do_include_subject_id: bool = False
     do_include_start_time_min: bool = False
+
+    n_samples_per_subject: int | None = None
+    seed: int | None = None
+
+    @property
+    def pre_cache_dir_name(self) -> str:
+        parts = sorted(
+            [
+                "max_seq_len",
+                "min_seq_len",
+                "seq_padding_side",
+                "subsequence_sampling_strategy",
+                "train_subset_size",
+                "train_subset_seed",
+                "do_include_subsequence_indices",
+                "do_include_subject_id",
+                "do_include_start_time_min",
+                "n_samples_per_subject",
+                "seed",
+            ]
+        )
+
+        parts_with_vals = [f"{n}:{getattr(self, n)}" for n in parts]
+        return "/".join(parts_with_vals)
 
     def __post_init__(self):
         if self.seq_padding_side not in SeqPaddingSide.values():
