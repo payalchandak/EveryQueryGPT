@@ -32,7 +32,7 @@ in_hospital_mortality:
     event: admission
   constraints.gap:
     start: trigger.end # this is the default
-    end: input.end + 24h
+    end: gap.start + 48h
     excludes: [admission, discharge, death]
   input:
     end: trigger.end + 24h
