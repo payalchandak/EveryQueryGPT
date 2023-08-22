@@ -21,6 +21,8 @@ inputs:
     end_ts_col: "disch_date"
     ts_format: "%m/%d/%Y, %H:%M:%S"
     event_type: ["OUTPATIENT_VISIT", "ADMISSION", "DISCHARGE"]
+    start_columns: {"admit_department": "department"}
+    end_columns: {"disch_department": "department"}
   vitals:
     input_df: "${raw_data_dir}/admit_vitals.csv"
     ts_col: "vitals_date"
@@ -43,7 +45,8 @@ measurements:
     multi_label_classification:
       admissions: ["department"]
     univariate_regression:
-      vitals: ["HR", "temp"]
+      vitals: ["HR", "temp", "weight"]
+      labs: ["weight"]
     multivariate_regression:
       labs: [["lab_name", "lab_value"]]
 
