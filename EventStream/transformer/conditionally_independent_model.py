@@ -80,6 +80,42 @@ class EQTForPretraining(StructuredTransformerPreTrainedModel):
 
         query_contextualized_encoding = self.query_contextualizer(encoded, query_encoded)
 
+    # Rate layer helpers
+    #     class ExponentialTTELayer(torch.nn.Module):
+    # """A class that outputs an exponential distribution for time-to-event.
+
+    # This class is used to initialize the ExponentialTTELayer and project the input tensor to get the
+    # implied exponential distribution.
+
+    # Args:
+    #     in_dim: The dimensionality of the input.
+    # """
+
+    # def __init__(self, in_dim: int):
+    #     super().__init__()
+    #     self.proj = torch.nn.Linear(in_dim, 1)
+
+    # def forward(self, T: torch.Tensor) -> torch.distributions.exponential.Exponential:
+    #     """Forward pass.
+
+    #     Args:
+    #         T: The input tensor.
+
+    #     Returns:
+    #         An `Exponential` distribution with parameters specified by `self.proj(T)` which has output shape
+    #         `(batch_size, sequence_length, 1)`.
+    #     """
+    #     # torch.nn.functional.elu has Image (-1, 1), but we need our rate parameter to be > 0. So we need to
+    #     # add 1 to the output here. To ensure validity given numerical imprecision, we also add a buffer given
+    #     # by the smallest possible positive value permissible given the type of `T`.
+    #     rate = torch.nn.functional.elu(self.proj(T)) + 1 + torch.finfo(T.dtype).tiny
+
+    #     # The rate currently has shape (batch_size, sequence_length, 1). We want to squeeze that last
+    #     # dimension.
+    #     rate = rate.squeeze(dim=-1)
+
+    #     return torch.distributions.exponential.Exponential(rate=rate)
+
         output = poisson(self.rate_layer(query_context...)).pdf(answer)
 
         if use_cache:
