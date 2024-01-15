@@ -1,385 +1,28 @@
 import copy
 import json
-from collections import defaultdict
-from datetime import datetime
 from functools import cached_property
+from collections import defaultdict, Counter
 from pathlib import Path
-
+from datetime import datetime
 import numpy as np
+import scipy.stats
 import polars as pl
 import torch
 from loguru import logger
-from mixins import SeedableMixin, TimeableMixin
 from tqdm.auto import tqdm
-
 from ..utils import count_or_proportion
 from .config import PytorchDatasetConfig, SeqPaddingSide, SubsequenceSamplingStrategy
+from mixins import SaveableMixin, SeedableMixin, TimeableMixin
+from .config import (
+    MeasurementConfig,
+    PytorchDatasetConfig,
+    SeqPaddingSide,
+    SubsequenceSamplingStrategy,
+    VocabularyConfig,
+)
 from .types import PytorchBatch
 
 DATA_ITEM_T = dict[str, list[float]]
-
-
-class PytorchDataset(TimeableMixin, torch.utils.data.Dataset):
-    """A PyTorch Dataset class.
-
-    This class enables accessing the deep-learning friendly representation produced by
-    `Dataset.build_DL_cached_representation` in a PyTorch Dataset format. The `getitem` method of this class
-    will return a dictionary containing a subject's data from this deep learning representation, with event
-    sequences sliced to be within max sequence length according to configuration parameters, and the `collate`
-    method of this class will collate those output dictionaries into a `PytorchBatch` object usable by
-    downstream pipelines.
-
-    Upon construction, this class will try to load a number of dataset files from disk. These files should be
-    saved in accordance with the `Dataset.save` method; in particular,
-
-    * There should be pre-cached deep-learning representation parquet dataframes stored in ``config.save_dir /
-      'DL_reps' / f"{split}*.parquet"``
-    * There should be a vocabulary config object in json form stored in ``config.save_dir /
-      'vocabulary_config.json'``
-    * There should be a set of inferred measurement configs stored in ``config.save_dir /
-      'inferred_measurement_configs.json'``
-    * If a task dataframe name is specified in the configuration object, then there should be either a
-      pre-cached task-specifid DL representation dataframe in ``config.save_dir / 'DL_reps' / 'for_task' /
-      config.task_df_name / f"{split}.parquet"``, or a "raw" task dataframe, containing subject IDs, start and
-      end times, and labels, stored in ``config.save_dir / task_dfs / f"{config.task_df_name}.parquet"``. In
-      the case that the latter is all that exists, then the former will be constructed by limiting the input
-      cached dataframe down to the appropriate sequences and adding label columns. This newly constructed
-      datafrmae will then be saved in the former filepath for future use. This construction process should
-      happen first on the train split, so that inferred task vocabularies are shared across splits.
-
-    Args:
-        config: Configuration options for the dataset.
-        split: The split of data which should be used in this dataset (e.g., ``'train'``, ``'tuning'``,
-            ``'held_out'``). This will dictate where the system looks for pre-cached deep-learning
-            representation files.
-    """
-
-    def __init__(self, config: PytorchDatasetConfig, split: str, just_cache: bool = False):
-        super().__init__()
-
-        self.config = config
-        self.split = split
-
-        self.cache_if_needed()
-        if just_cache:
-            return
-
-        self.fetch_tensors()
-        self.fetch_metadata()
-
-    def __len__(self):
-        return self.tensors["time_delta"].shape[0]
-
-    @property
-    def has_task(self) -> bool:
-        return self.config.task_df_name is not None
-
-    @property
-    def seq_padding_side(self) -> SeqPaddingSide:
-        return self.config.seq_padding_side
-
-    @property
-    def max_seq_len(self) -> int:
-        return self.config.max_seq_len
-
-    @property
-    def cached_files_exist(self) -> bool:
-        return len(self.config.tensorized_cached_files(self.split)) > 0
-
-    @cached_property
-    def _full_data_config(self) -> PytorchDatasetConfig:
-        config = copy.deepcopy(self.config)
-        config.train_subset_size = "FULL"
-        config.train_subset_seed = None
-        config.do_include_subsequence_indices = True
-        config.do_include_subject_id = True
-        config.do_include_start_time_min = True
-        return config
-
-    @property
-    def full_dataset_cached_files_exist(self) -> bool:
-        return len(self._full_data_config.tensorized_cached_files(self.split)) > 0
-
-    @property
-    def is_subset_dataset(self) -> bool:
-        return self.config.train_subset_size != "FULL"
-
-    @TimeableMixin.TimeAs
-    def cache_if_needed(self):
-        if self.cached_files_exist:
-            return
-
-        if self.is_subset_dataset:
-            # cache full, if doesn't exist
-            if not self.full_dataset_cached_files_exist:
-                logger.info("Caching the full dataset to efficiently cache subset...")
-                self._cache_full_data()
-            # cache subset
-            logger.info("Caching the subset dataset to efficiently cache subset...")
-            self._cache_subset()
-        else:
-            # cache full data
-            logger.info("Caching the full dataset...")
-            self._cache_full_data()
-
-    @TimeableMixin.TimeAs
-    def _cache_subset(self):
-        # Load cached tensors from full data
-        tensors = {
-            k: torch.load(fp) for k, fp in self._full_data_config.tensorized_cached_files(self.split).items()
-        }
-
-        if self.split == "train":
-            # Randomly sample for new subset_size number of subjects and save new tensors
-            full_subj_ids = list(set(tensors["subject_id"]))
-            subset_size = count_or_proportion(len(full_subj_ids), self.config.train_subset_size)
-            logger.info(
-                f"Caching subset of {subset_size} subjects from full dataset of {len(full_subj_ids)} subjects"
-            )
-            subset_subjects = np.random.default_rng(self.config.train_subset_seed).choice(
-                list(set(tensors["subject_id"])), size=subset_size, replace=False
-            )
-            subject_idx = np.where(np.isin(np.array(tensors["subject_id"]), subset_subjects))[0]
-            for k, T in tqdm(tensors.items(), leave=False, desc="Caching..."):
-                subset_T = T[subject_idx]
-                fp = self.config.tensorized_cached_dir / self.split / f"{k}.pt"
-                fp.parent.mkdir(exist_ok=True, parents=True)
-                st = datetime.now()
-                logger.info(f"Caching tensor {k} of shape {subset_T.shape} to {fp}...")
-                torch.save(subset_T, fp)
-                logger.info(f"Done in {datetime.now() - st}")
-
-            # Load cached data on full data
-            task_dir = self._full_data_config.tensorized_cached_dir / self.split
-            cached_data = pl.DataFrame(
-                {
-                    "subject_id": torch.load(task_dir / "subject_id.pt").numpy(),
-                    "time_delta": torch.load(task_dir / "time_delta.pt").numpy(),
-                    "event_mask": torch.load(task_dir / "event_mask.pt").numpy(),
-                    # 'dynamic_indices': torch.load(task_dir / "dynamic_indices.pt").numpy().tolist()
-                }
-            )
-
-            # Filter for sampled subjects and event_mask = True
-            cached_data = cached_data.filter(pl.col("subject_id").is_in(subset_subjects))
-            cached_data = cached_data.select(pl.col(["time_delta", "event_mask"]).explode()).filter(
-                pl.col("event_mask")
-            )
-
-            stats = cached_data.select(
-                pl.col("time_delta").explode().drop_nulls().alias("inter_event_time")
-            ).select(
-                pl.col("inter_event_time").min().alias("min"),
-                pl.col("inter_event_time").log().mean().alias("mean_log"),
-                pl.col("inter_event_time").log().std().alias("std_log"),
-            )
-            subset_data_stats_fp = self.config.tensorized_cached_dir / self.split / "data_stats.json"
-            with open(subset_data_stats_fp, mode="w") as f:
-                subset_stats = {
-                    "mean_log_inter_event_time_min": stats["mean_log"].item(),
-                    "std_log_inter_event_time_min": stats["std_log"].item(),
-                }
-                logger.info(f"Saving subset data_stats to {subset_data_stats_fp}")
-                json.dump(subset_stats, f)
-        else:
-            # Save full tensors in subset dir
-            for k, T in tqdm(tensors.items(), leave=False, desc="Caching..."):
-                subset_T = T
-                fp = self.config.tensorized_cached_dir / self.split / f"{k}.pt"
-                fp.parent.mkdir(exist_ok=True, parents=True)
-                st = datetime.now()
-                logger.info(f"Caching tensor {k} of shape {subset_T.shape} to {fp}...")
-                torch.save(subset_T, fp)
-                logger.info(f"Done in {datetime.now() - st}")
-
-            # Save full_data_stats into subset data_stats
-            full_data_stats_fp = self._full_data_config.tensorized_cached_dir / self.split / "data_stats.json"
-            subset_data_stats_fp = self.config.tensorized_cached_dir / self.split / "data_stats.json"
-            with open(full_data_stats_fp) as f:
-                logger.info(f"Loading full data stats from {full_data_stats_fp}")
-                full_data_stats = json.load(f)
-            with open(subset_data_stats_fp, mode="w") as f:
-                logger.info(f"Saving {self.split} full data stats to subset dir {subset_data_stats_fp}")
-                json.dump(full_data_stats, f)
-
-    @TimeableMixin.TimeAs
-    def _cache_full_data(self):
-        self._full_data_config._cache_data_parameters()
-
-        items = []
-        constructor_pyd = ConstructorPytorchDataset(self._full_data_config, self.split)
-
-        (self._full_data_config.tensorized_cached_dir / self.split).mkdir(exist_ok=True, parents=True)
-
-        data_stats_fp = self._full_data_config.tensorized_cached_dir / self.split / "data_stats.json"
-        with open(data_stats_fp, mode="w") as f:
-            stats = {
-                "mean_log_inter_event_time_min": constructor_pyd.mean_log_inter_event_time_min,
-                "std_log_inter_event_time_min": constructor_pyd.std_log_inter_event_time_min,
-            }
-            logger.info(f"Saving full data_stats to {data_stats_fp}")
-            json.dump(stats, f)
-
-        logger.info("Collecting data to cache.")
-        for ep in tqdm(range(self.config.cache_for_epochs), total=self.config.cache_for_epochs, leave=False):
-            for it in tqdm(constructor_pyd, total=len(constructor_pyd)):
-                items.append(it)
-
-        logger.info("Collating data into dense tensors to cache.")
-        global_batch = constructor_pyd.collate(items, do_convert_float_nans=False)
-
-        tensors_to_cache = []
-        seen_keys = set()
-        for k, T in global_batch.items():
-            if k.endswith("_mask") and k != "event_mask":
-                continue
-            if T is None:
-                continue
-            if isinstance(T, torch.Tensor):
-                if k in seen_keys:
-                    raise KeyError(f"Duplicate tensor save key {k}!")
-                tensors_to_cache.append((k, T))
-                seen_keys.add(k)
-            elif isinstance(T, dict):
-                for kk, TT in T.items():
-                    if TT is None:
-                        continue
-                    elif not isinstance(TT, torch.Tensor):
-                        raise TypeError(f"Unrecognized tensor type {type(TT)} @ {k}/{kk}!")
-
-                    if kk in seen_keys:
-                        raise KeyError(f"Duplicate tensor save key {kk}!")
-                    tensors_to_cache.append((kk, TT))
-                    seen_keys.add(kk)
-            else:
-                raise TypeError(f"Unrecognized tensor type {type(T)} @ {k}!")
-
-        for k, T in tqdm(tensors_to_cache, leave=False, desc="Caching..."):
-            fp = self._full_data_config.tensorized_cached_dir / self.split / f"{k}.pt"
-            fp.parent.mkdir(exist_ok=True, parents=True)
-            st = datetime.now()
-            logger.info(f"Caching tensor {k} of shape {T.shape} to {fp}...")
-            torch.save(T, fp)
-            logger.info(f"Done in {datetime.now() - st}")
-
-    def fetch_tensors(self):
-        self.tensors = {
-            k: torch.load(fp) for k, fp in self.config.tensorized_cached_files(self.split).items()
-        }
-
-        with open(self.config.tensorized_cached_dir / self.split / "data_stats.json") as f:
-            stats = json.load(f)
-
-            self.mean_log_inter_event_time_min = stats["mean_log_inter_event_time_min"]
-            self.std_log_inter_event_time_min = stats["std_log_inter_event_time_min"]
-
-    def fetch_metadata(self):
-        self.vocabulary_config = self.config.vocabulary_config
-        self.measurement_configs = self.config.measurement_configs
-
-        if self.has_task:
-            with open(self.config.task_info_fp) as f:
-                task_info = json.load(f)
-                self.tasks = sorted(task_info["tasks"])
-                self.task_vocabs = task_info["vocabs"]
-                self.task_types = task_info["types"]
-
-    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
-        """Returns a Returns a dictionary corresponding to a single subject's data.
-
-        The output of this will not be tensorized as that work will need to be re-done in the collate function
-        regardless. The output will have structure:
-        ``
-        {
-            'time_delta': [seq_len],
-            'dynamic_indices': [seq_len, n_data_per_event] (ragged),
-            'dynamic_values': [seq_len, n_data_per_event] (ragged),
-            'dynamic_measurement_indices': [seq_len, n_data_per_event] (ragged),
-            'static_indices': [seq_len, n_data_per_event] (ragged),
-            'static_measurement_indices': [seq_len, n_data_per_event] (ragged),
-        }
-        ``
-
-        1. ``time_delta`` captures the time between each event and the subsequent event.
-        2. ``dynamic_indices`` captures the categorical metadata elements listed in `self.data_cols` in a
-           unified vocabulary space spanning all metadata vocabularies.
-        3. ``dynamic_values`` captures the numerical metadata elements listed in `self.data_cols`. If no
-           numerical elements are listed in `self.data_cols` for a given categorical column, the according
-           index in this output will be `np.NaN`.
-        4. ``dynamic_measurement_indices`` captures which measurement vocabulary was used to source a given
-           data element.
-        5. ``static_indices`` captures the categorical metadata elements listed in `self.static_cols` in a
-           unified vocabulary.
-        6. ``static_measurement_indices`` captures which measurement vocabulary was used to source a given
-           data element.
-        """
-        return {k: T[idx] for k, T in self.tensors.items()}
-
-    @TimeableMixin.TimeAs
-    def collate(self, batch: list[DATA_ITEM_T]) -> PytorchBatch:
-        """Combines the ragged dictionaries produced by `__getitem__` into a tensorized batch.
-
-        This function handles conversion of arrays to tensors and padding of elements within the batch across
-        static data elements, sequence events, and dynamic data elements.
-
-        Args:
-            batch: A list of `__getitem__` format output dictionaries.
-
-        Returns:
-            A fully collated, tensorized, and padded batch.
-        """
-
-        collated = torch.utils.data.default_collate(batch)
-
-        self._register_start("collate_post_padding_processing")
-        out_batch = {}
-
-        # Add event and data masks on the basis of which elements are present, then convert the tensor
-        # elements to the appropriate types.
-        out_batch["event_mask"] = ~collated["time_delta"].isnan()
-        out_batch["dynamic_values_mask"] = ~collated["dynamic_values"].isnan()
-        out_batch["time_delta"] = torch.nan_to_num(collated["time_delta"], nan=0)
-        out_batch["dynamic_indices"] = collated["dynamic_indices"]
-        out_batch["dynamic_measurement_indices"] = collated["dynamic_measurement_indices"]
-        out_batch["dynamic_values"] = torch.nan_to_num(collated["dynamic_values"], nan=0)
-        out_batch["static_indices"] = collated["static_indices"]
-        out_batch["static_measurement_indices"] = collated["static_indices"]
-
-        if self.config.do_include_start_time_min:
-            out_batch["start_time"] = collated["start_time"].float()
-        if self.config.do_include_subsequence_indices:
-            out_batch["start_idx"] = collated["start_idx"].long()
-            out_batch["end_idx"] = collated["end_idx"].long()
-        if self.config.do_include_subject_id:
-            out_batch["subject_id"] = collated["subject_id"].long()
-
-        out_batch = PytorchBatch(**out_batch)
-        self._register_end("collate_post_padding_processing")
-
-        if self.config.task_df_name is None:
-            return out_batch
-
-        self._register_start("collate_task_labels")
-        out_labels = {}
-
-        for task in self.tasks:
-            task_type = self.task_types[task]
-
-            match task_type:
-                case "multi_class_classification":
-                    out_labels[task] = collated[task].long()
-                case "binary_classification":
-                    out_labels[task] = collated[task].float()
-                case "regression":
-                    out_labels[task] = collated[task].float()
-                case _:
-                    raise TypeError(f"Don't know how to tensorify task of type {task_type}!")
-
-        out_batch.stream_labels = out_labels
-        self._register_end("collate_task_labels")
-
-        return out_batch
-
 
 def to_int_index(col: pl.Expr) -> pl.Expr:
     """Returns an integer index of the unique elements seen in this column.
@@ -416,9 +59,8 @@ def to_int_index(col: pl.Expr) -> pl.Expr:
     indices = col.unique(maintain_order=True).drop_nulls().search_sorted(col)
     return pl.when(col.is_null()).then(pl.lit(None)).otherwise(indices).alias(col.meta.output_name())
 
-
-class ConstructorPytorchDataset(SeedableMixin, TimeableMixin, torch.utils.data.Dataset):
-    """A PyTorch Dataset class which constructs necessary items from scratch.
+class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.data.Dataset):
+    """A PyTorch Dataset class built on a pre-processed `DatasetBase` instance.
 
     This class enables accessing the deep-learning friendly representation produced by
     `Dataset.build_DL_cached_representation` in a PyTorch Dataset format. The `getitem` method of this class
@@ -490,6 +132,8 @@ class ConstructorPytorchDataset(SeedableMixin, TimeableMixin, torch.utils.data.D
 
     def __init__(self, config: PytorchDatasetConfig, split: str):
         super().__init__()
+
+        print('EveryQueryGPT dataloader')
 
         self.config = config
         self.task_types = {}
@@ -887,49 +531,64 @@ class ConstructorPytorchDataset(SeedableMixin, TimeableMixin, torch.utils.data.D
                 full_subj_data[k] = []
         if self.config.do_include_subject_id:
             full_subj_data["subject_id"] = self.subject_ids[idx]
-        if self.config.do_include_start_time_min:
-            # Note that this is using the python datetime module's `timestamp` function which differs from
-            # some dataframe libraries' timestamp functions (e.g., polars).
-            full_subj_data["start_time"] = full_subj_data["start_time"].timestamp() / 60.0
-        else:
-            full_subj_data.pop("start_time")
 
-        # If we need to truncate to `self.max_seq_len`, grab a random full-size span to capture that.
-        # TODO(mmd): This will proportionally underweight the front and back ends of the subjects data
-        # relative to the middle, as there are fewer full length sequences containing those elements.
-        seq_len = len(full_subj_data["time_delta"])
-        if seq_len > self.max_seq_len:
-            with self._time_as("truncate_to_max_seq_len"):
-                match self.config.subsequence_sampling_strategy:
-                    case SubsequenceSamplingStrategy.RANDOM:
-                        start_idx = np.random.choice(seq_len - self.max_seq_len)
-                    case SubsequenceSamplingStrategy.TO_END:
-                        start_idx = seq_len - self.max_seq_len
-                    case SubsequenceSamplingStrategy.FROM_START:
-                        start_idx = 0
-                    case _:
-                        raise ValueError(
-                            f"Invalid sampling strategy: {self.config.subsequence_sampling_strategy}!"
-                        )
+        # config params (all in min) 
+        min_query_duration = 60 # 1 hour
+        max_query_duration = 60*24*365 # 1 year
+        min_input_duration = 60*24 # 1 day
 
-                if self.config.do_include_start_time_min:
-                    full_subj_data["start_time"] += sum(full_subj_data["time_delta"][:start_idx])
-                if self.config.do_include_subsequence_indices:
-                    full_subj_data["start_idx"] = start_idx
-                    full_subj_data["end_idx"] = start_idx + self.max_seq_len
+        # sample query duration
+        start_time = full_subj_data["start_time"].timestamp() / 60 # minutes 
+        times = np.array([sum(full_subj_data["time_delta"][:i]) for i in range(1, len(full_subj_data["time_delta"])+1)])
+        record_duration = times[-1]
+        query_duration = np.random.randint(min_query_duration, min(max_query_duration, record_duration-min_input_duration))
 
-                for k in (
+        # sample input start and end 
+        max_input_end_time = start_time + record_duration - query_duration
+        max_input_end_idx = np.max(np.argwhere((times+start_time) < max_input_end_time))
+        if max_input_end_idx > self.max_seq_len: 
+            input_start_idx = np.random.choice(max_input_end_idx - self.max_seq_len)
+            input_end_idx = input_start_idx + self.max_seq_len
+        else: 
+            input_start_idx = 0
+            input_end_idx = max_input_end_idx
+
+        # sample query start offset and get indices  
+        query_start_offset = np.random.sample() * (record_duration - times[input_end_idx] - query_duration)
+        query_start_time = start_time + times[input_end_idx] + query_start_offset
+        query_end_time = query_start_time + query_duration
+        query_start_idx = np.min(np.argwhere((times+start_time) >= query_start_time))
+        query_end_idx = np.min(np.argwhere((times+start_time) >= query_end_time))
+
+        # code 
+        codes_observed = Counter(sum( full_subj_data['dynamic_indices'][query_start_idx:query_end_idx+1], []))
+        code = np.random.choice(list(codes_observed.keys())) # (todo) sample from vocab
+
+        # range sampled as a random interval from the support of the normal distribution sampled according to its density
+        range_min, range_max = sorted([scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1), 
+                                       scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1)])
+
+        for k in (
                     "time_delta",
                     "dynamic_indices",
                     "dynamic_values",
                     "dynamic_measurement_indices",
                 ):
-                    full_subj_data[k] = full_subj_data[k][start_idx : start_idx + self.max_seq_len]
-        elif self.config.do_include_subsequence_indices:
-            full_subj_data["start_idx"] = 0
-            full_subj_data["end_idx"] = seq_len
+                    full_subj_data[k] = full_subj_data[k][input_start_idx : input_end_idx]
 
-        return full_subj_data
+        query = {
+            # s, end time e, and code c with some (potentially fully open) value range (L,R)
+            'query_start_offset': query_start_offset,
+            'duration': query_duration,
+            'code': code,
+            # range_mask has_val and zero range for missing 
+            'range_min': range_min, 
+            'range_max': range_max, 
+        } 
+
+        freq = codes_observed[code] # account for range min and max; call it answer 
+
+        return full_subj_data, query, freq
 
     def __static_and_dynamic_collate(
         self, batch: list[DATA_ITEM_T], do_convert_float_nans: bool = True
