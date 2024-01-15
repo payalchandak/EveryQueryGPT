@@ -535,11 +535,12 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             'query_start_offset': query_start_offset,
             'duration': query_duration,
             'code': code,
+            # range_mask has_val and zero range for missing 
             'range_min': range_min, 
             'range_max': range_max, 
         } 
 
-        freq = codes_observed[code]
+        freq = codes_observed[code] # account for range min and max; call it answer 
 
         return full_subj_data, query, freq
 

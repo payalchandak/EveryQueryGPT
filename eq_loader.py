@@ -41,8 +41,6 @@ pyd_config = PytorchDatasetConfig(
 
 pyd = PytorchDataset(config=pyd_config, split='train')
 
-VOCAB_OBS_FREQ = 1 # cant find this in the config ??
-
 codes = []
 vocab = Dataset.load(Path(dataset_dir)).unified_vocabulary_idxmap
 for key, cfg in pyd.measurement_configs.items(): 
@@ -52,13 +50,24 @@ for key, cfg in pyd.measurement_configs.items():
     for code_name, code_idx in vocab[key].items(): 
         if code_name=="UNK": continue 
         if '__EQ_' in code_name: has_value = False
-        obs_freq = ofoc * ofpc * VOCAB_OBS_FREQ
+        vocab_obs_freq = cfg.vocabulary.obs_frequencies[cfg.vocabulary[code_name]]
+        obs_freq = ofoc * ofpc * vocab_obs_freq
         codes.append( (code_name, code_idx, has_value, obs_freq) ) 
     
 # todo: 
 # figure out where to get the VOCAB_OBS_FREQ
 # code sampling strategy based on the observation frequency 
+# bin buckets of obs freq and sample bucket uniformly and then sample code randomly from the bucket 
 # place in pyd class 
+
+
+# collate query and answer "_static_and_dynamic_collate"
+
+# data/data_embedding_layer.py
+# data embedding layer to reuse 
+CIPPT -> encoder -> input_layer -> data_embedding_layer 
+data_embedding_layer has several "modes", check to use one...  
+
 
 print(f"Dataset has {len(pyd)} rows")
 inputs, query, freq = pyd[0]
