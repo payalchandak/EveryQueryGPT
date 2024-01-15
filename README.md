@@ -31,6 +31,10 @@ GitHub issue.
 Installation of the required dependencies can be done via pip with `pip install -e .` in the root directory of
 the repository. To be able to run tests, use `pip install -e .[tests]`. To be able to build docs, use `pip install -e .[docs]`.
 
+Note that ESGPT currently only supports polars >= 0.19 (as a number of function names were changed at that
+version). If you try to use it with an old environment and see errors on function names like `groupby` vs.
+`group_by`, that is likely the cause.
+
 ## Overview
 
 This codebase contains utilities for working with event stream datasets, meaning datasets where any given sample consists of a sequence of continuous-time events. Each event can consist of various categorical or continuous measurements of various structures.
@@ -393,6 +397,10 @@ documentation](https://pola-rs.github.io/polars/py-polars/html/reference/api/pol
 ## Testing
 
 EventStream code is tested in the global tests folder. These tests can be run via `python -m unittest` in the global directory. These tests are not exhaustive, particularly in covering the operation of EventStreamTransformer, but they are relatively comprehensive over core EventStreamData functionality.
+
+## Frequently Asked Questions
+
+Please see [this google doc](https://docs.google.com/document/d/1N_MNeqtnrCypkWKXlQjmvoxzV_k4kP_LY0_YfjkFEjA/edit?usp=sharing) for a running list of some common questions or errors that people have encountered.
 
 ## Contributing
 
