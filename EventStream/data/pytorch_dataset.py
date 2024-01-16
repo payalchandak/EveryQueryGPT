@@ -560,14 +560,29 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         query_start_idx = np.min(np.argwhere((times+start_time) >= query_start_time))
         query_end_idx = np.min(np.argwhere((times+start_time) >= query_end_time))
 
-        # code 
-        codes_observed = Counter(sum( full_subj_data['dynamic_indices'][query_start_idx:query_end_idx+1], []))
-        code = np.random.choice(list(codes_observed.keys())) # (todo) sample from vocab
+        # code and range
+        code_name, code_idx, code_has_value =  '', 17193, True  # (todo) replace with sampling function
+        if code_has_value: 
+            # range sampled as a random interval from the support of the normal distribution sampled according to its density
+            range_min, range_max = sorted([scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1), 
+                                           scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1)])
+        else: 
+            range_min, range_max = 0, 0 
 
-        # range sampled as a random interval from the support of the normal distribution sampled according to its density
-        range_min, range_max = sorted([scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1), 
-                                       scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1)])
-
+        # calculate answer 
+        answer = 0
+        query_dynamic_indices = full_subj_data['dynamic_indices'][query_start_idx:query_end_idx+1]
+        query_dynamic_values = full_subj_data['dynamic_values'][query_start_idx:query_end_idx+1]
+        for i in range(len(query_dynamic_indices)): 
+            for j in range(len(query_dynamic_indices[i])): 
+                if query_dynamic_indices[i][j] == code_idx:
+                    if code_has_value: 
+                        x = query_dynamic_values[i][j]
+                        if (x>=range_min) and (x<=range_max): 
+                            answer += 1
+                    else: 
+                        answer += 1
+                    
         for k in (
                     "time_delta",
                     "dynamic_indices",
@@ -577,18 +592,16 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
                     full_subj_data[k] = full_subj_data[k][input_start_idx : input_end_idx]
 
         query = {
-            # s, end time e, and code c with some (potentially fully open) value range (L,R)
-            'query_start_offset': query_start_offset,
+            'start_offset': query_start_offset,
             'duration': query_duration,
-            'code': code,
-            # range_mask has_val and zero range for missing 
+            'code_name': code_name,
+            'code_idx': code_idx,
+            'code_has_value': code_has_value,
             'range_min': range_min, 
             'range_max': range_max, 
         } 
 
-        freq = codes_observed[code] # account for range min and max; call it answer 
-
-        return full_subj_data, query, freq
+        return full_subj_data, query, answer
 
     def __static_and_dynamic_collate(
         self, batch: list[DATA_ITEM_T], do_convert_float_nans: bool = True
