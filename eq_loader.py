@@ -41,40 +41,17 @@ pyd_config = PytorchDatasetConfig(
 
 pyd = PytorchDataset(config=pyd_config, split='train')
 
-
-def sample_code(): 
-    codes = []
-    vocab = Dataset.load(Path(dataset_dir)).unified_vocabulary_idxmap
-    for key, cfg in pyd.measurement_configs.items(): 
-        has_value = 'regression' in cfg.modality
-        ofoc = cfg.observation_rate_over_cases
-        ofpc = cfg.observation_rate_per_case
-        for code_name, code_idx in vocab[key].items(): 
-            if code_name=="UNK": continue 
-            if '__EQ_' in code_name: has_value = False
-            if cfg.vocabulary is None: 
-                print('VOCAB MISSING FOR ',code_name, code_idx) # ERROR !! 
-                continue 
-            vocab_obs_freq = cfg.vocabulary.obs_frequencies[cfg.vocabulary[code_name]]
-            obs_freq = ofoc * ofpc * vocab_obs_freq
-            codes.append( (code_name, code_idx, has_value, obs_freq) ) 
-
-    buckets = [(0,1e-5)]+[(10**x,10**(x+1)) for x in range(-5,0)]
-    obs_freq_start, obs_freq_end = random.choice(buckets)
-    codes_in_bucket = [code for code in codes if (code[-1] >= obs_freq_start) and (code[-1] <= obs_freq_end)]
-    code_name, code_idx, has_value, obs_freq = random.choice(codes_in_bucket)
-    return code_name, code_idx, has_value
-
-sample_code()
 # collate query and answer "_static_and_dynamic_collate"
 
 # data/data_embedding_layer.py
 # data embedding layer to reuse 
 # CIPPT -> encoder -> input_layer -> data_embedding_layer 
 # data_embedding_layer has several "modes", check to use one...  
+# ESGPT train -> define LM -> line 109 in LM to initialize model -> encoder 
 
 print(f"Dataset has {len(pyd)} rows")
 inputs, query, ans = pyd[0]
-print('context',inputs.keys())
+# print('context',inputs.keys())
 print('query',query)
 print('answer',ans)
+print()

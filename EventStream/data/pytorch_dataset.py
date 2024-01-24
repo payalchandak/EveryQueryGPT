@@ -561,7 +561,8 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         query_end_idx = np.min(np.argwhere((times+start_time) >= query_end_time))
 
         # code and range
-        code_name, code_idx, code_has_value =  '', 17193, True  # (todo) replace with sampling function
+        code_name, code_idx, code_has_value =  self.config.sample_code() 
+
         if code_has_value: 
             # range sampled as a random interval from the support of the normal distribution sampled according to its density
             range_min, range_max = sorted([scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1), 
