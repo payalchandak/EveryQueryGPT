@@ -41,17 +41,21 @@ pyd_config = PytorchDatasetConfig(
 
 pyd = PytorchDataset(config=pyd_config, split='train')
 
-# collate query and answer "_static_and_dynamic_collate"
+# inputs, query, answer = pyd[0]
+
+dataloader = torch.utils.data.DataLoader(
+        pyd,
+        batch_size=8,
+        num_workers=8,
+        collate_fn=pyd.collate,
+        shuffle=True,
+    )
+
+for batch in dataloader: 
+    print(batch)
 
 # data/data_embedding_layer.py
 # data embedding layer to reuse 
 # CIPPT -> encoder -> input_layer -> data_embedding_layer 
 # data_embedding_layer has several "modes", check to use one...  
 # ESGPT train -> define LM -> line 109 in LM to initialize model -> encoder 
-
-print(f"Dataset has {len(pyd)} rows")
-inputs, query, ans = pyd[0]
-# print('context',inputs.keys())
-print('query',query)
-print('answer',ans)
-print()

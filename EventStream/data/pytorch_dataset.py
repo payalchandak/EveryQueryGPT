@@ -246,6 +246,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             self.cached_data = self.cached_data.with_columns(
                 (pl.col("start_time") + pl.duration(minutes=pl.col("time").list.first())).alias("start_time"),
                 pl.col("time")
+                
                 .list.eval(
                     # We fill with 1 here as it will be ignored in the code anyways as the next event's
                     # event mask will be null.
@@ -780,7 +781,28 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         Returns:
             A fully collated, tensorized, and padded batch.
         """
+
+        inputs, queries, answers = map(list, zip(*batch))
+
         if self.do_produce_static_data:
-            return self.__static_and_dynamic_collate(batch, do_convert_float_nans=do_convert_float_nans)
+            collated_inputs = self.__static_and_dynamic_collate(inputs, do_convert_float_nans=do_convert_float_nans)
         else:
-            return self.__dynamic_only_collate(batch, do_convert_float_nans=do_convert_float_nans)
+            collated_inputs = self.__dynamic_only_collate(inputs, do_convert_float_nans=do_convert_float_nans)
+
+        collated_queries = {
+            'start_offset': torch.tensor([q['start_offset'] for q in queries], dtype=torch.float),
+            'duration': torch.tensor([q['duration'] for q in queries], dtype=torch.int64),
+            # 'code_names': Skip for now
+            'code_idx': torch.tensor([q['code_idx'] for q in queries], dtype=torch.int64),
+            'code_has_value': torch.tensor([q['code_has_value'] for q in queries], dtype=torch.bool),
+            'range_min': torch.tensor([q['range_min'] for q in queries], dtype=torch.float),
+            'range_max': torch.tensor([q['range_max'] for q in queries], dtype=torch.float)
+        }
+
+        # todo: batch normalize start_offset and duration ? 
+
+        collated_answers = torch.FloatTensor(answers)
+
+        batch = collated_inputs, collated_queries, collated_answers
+
+        return batch
