@@ -22,9 +22,6 @@ from EventStream.data.types import PytorchBatch
 from EventStream.data.pytorch_dataset import PytorchDataset
 from EventStream.tasks.profile import add_tasks_from
 
-
-OBS_FREQ_NUM_BUCKETS = 4
-
 COHORT_NAME = "ESD_09-01-23-1"
 TASK_NAME = "readmission_30d_all"
 PROJECT_DIR = Path(os.environ["PROJECT_DIR"])
@@ -39,17 +36,19 @@ pyd_config = PytorchDatasetConfig(
     #cache_for_epochs=1,
 )
 
-pyd = PytorchDataset(config=pyd_config, split='train')
-
+pyd = PytorchDataset(
+    config=pyd_config, 
+    split='train'
+)
 # inputs, query, answer = pyd[0]
 
 dataloader = torch.utils.data.DataLoader(
-        pyd,
-        batch_size=8,
-        num_workers=8,
-        collate_fn=pyd.collate,
-        shuffle=True,
-    )
+    pyd,
+    batch_size=8,
+    num_workers=8,
+    collate_fn=pyd.collate,
+    shuffle=True,
+)
 
 for batch in dataloader: 
     print(batch)
