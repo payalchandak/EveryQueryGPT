@@ -945,6 +945,7 @@ class ConditionallyIndependentPointProcessTransformer(StructuredTransformerPreTr
         )
 
 
+# question –– can delete? 
 class NestedAttentionPointProcessInputLayer(torch.nn.Module):
     """Processes input batch and produces input dependency graph element embeddings.
 
@@ -1037,7 +1038,7 @@ class NestedAttentionPointProcessInputLayer(torch.nn.Module):
 
         return self.embedding_dropout(embed)
 
-
+# question –– can delete? 
 class NestedAttentionPointProcessTransformer(StructuredTransformerPreTrainedModel):
     """A transformer model specifically for nested attention point processes.
 

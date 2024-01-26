@@ -105,7 +105,9 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                 raise ValueError(
                     f"Unsupported structured event processing mode: {config.structured_event_processing_mode}"
                 )
-
+            
+        # initializing model here, should always be CIPPTForGenerativeSequenceModeling
+            
         if pretrained_weights_fp is None:
             self.model = model_cls(config)
         else:
@@ -236,6 +238,7 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                                 **metric_cls_kwargs, **averaging_kwargs
                             )
 
+    # can stay
     def _log_metric_dict(
         self,
         preds: torch.Tensor,
@@ -285,6 +288,7 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                     f"with preds ({str_summary(preds)}) and labels ({str_summary(labels)}): {e}."
                 )
 
+    # can go
     def log_tte_metrics(self, results: GenerativeSequenceModelOutput, split: Split):
         # The output of the model for time-to-event (and for regression targets as well) are pytorch
         # distribution objects, not scalars. So, for some evaluation metrics, we need to sample values from

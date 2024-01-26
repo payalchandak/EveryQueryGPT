@@ -21,48 +21,27 @@ from .transformer import (
 )
 
 
-class ConditionallyIndependentGenerativeOutputLayer():
-    """The output layer for the conditionally independent event stream model.
-
-    TODO(mmcdermott):
-        Allow for use of NLL-beta throughout? https://github.com/mmcdermott/EventStreamGPT/issues/26
-
-    Args:
-        config: The overall model configuration.
-
-    Raises:
-        ValueError: If the model configuration does not indicate conditionally independent mode.
-    """
+# question – is this layer called elsewhere in the codebase or can I rename to EveryQueryOutputLayer? 
+# class ConditionallyIndependentGenerativeOutputLayer():
+class EveryQueryOutputLayer():
 
     def __init__(
         self,
         config: StructuredTransformerConfig,
     ):
         super().__init__()
-        self.rate_layer = torch.nn.Linear(config.hidden_size + config.query_hidden_size, 1)
+        self.rate_layer = torch.nn.Linear(config.hidden_size + config.query_hidden_size, 1) 
+        # (todo) update config to include params
 
     def forward(
         self,
-        encoded: torch.FloatTensor,
-        query_encoded: torch.FloatTensor,
+        encoded_context: torch.FloatTensor,
+        encoded_query: torch.FloatTensor,
         answer: torch.FloatTensor,
-    ) -> GenerativeSequenceModelOutput:
-        """Returns the overall model output for the input batch.
-
-        It takes the final hidden states from the encoder and runs them through various output layers to
-        predict subsequent event timing and contents. It's difference from a nested attention variant is
-        largely in that it predicts everything simultaneously.
-
-        Args:
-            batch: The batch of data to process.
-            encoded: The encoded representation of the input data.
-            is_generation: Whether or not we are in generation mode. If so, the output predictions are for the
-                next event for both time and event contents; if not, then we shift the event contents
-                predictoin back by one event in order to align with the labels.
-        """
-
-        predicted_rate = self.rate_layer(encoded + query_encoded)
-        return torch.distributions.Poisson(predicted_rate).pdf(answer)
+    ) -> torch.FloatTensor:
+    # ) -> GenerativeSequenceModelOutput: # question - what is the purpose of this output object
+        predicted_rate = self.rate_layer(torch.cat([encoded_context, encoded_query], dim=0)) # (todo) need to check the dim
+        return torch.distributions.Poisson(predicted_rate).log_prob(answer) 
         
 
 
@@ -94,12 +73,14 @@ class CIPPTForGenerativeSequenceModeling(StructuredGenerationMixin, StructuredTr
         if config.structured_event_processing_mode != StructuredEventProcessingMode.CONDITIONALLY_INDEPENDENT:
             raise ValueError(f"{config.structured_event_processing_mode} invalid!")
 
-        self.encoder = ConditionallyIndependentPointProcessTransformer(config)
-        self.output_layer = ConditionallyIndependentGenerativeOutputLayer(config)
+        self.context_encoder = ConditionallyIndependentPointProcessTransformer(config)
+        self.query_encoder = None
+        self.output_layer = EveryQueryOutputLayer(config)
 
         # Initialize weights and apply final processing
-        self.post_init()
+        self.post_init() # question – why call it when post init is not defined for this class ??? 
 
+    # question – can we remove this function? 
     def prepare_inputs_for_generation(
         self, batch: PytorchBatch, past: tuple | None = None, **kwargs
     ) -> dict[str, Any]:
@@ -152,37 +133,23 @@ class CIPPTForGenerativeSequenceModeling(StructuredGenerationMixin, StructuredTr
             "past": past,
         }
 
-    def forward(
-        self, batch: PytorchBatch, is_generation: bool = False, **kwargs
-    ) -> GenerativeSequenceModelOutput:
-        """This runs the full forward pass of the model.
+    def forward(self, batch: PytorchBatch, **kwargs) -> torch.FloatTensor: 
+    # ) -> GenerativeSequenceModelOutput: again why this output object? 
 
-        Args:
-            batch: The batch of data to be transformed.
-            is_generation: Whether or not the model is being used for generation.
-            **kwargs: Additional keyword arguments, which are used for output structuring and are forwarded to
-                the encoder. The model specifically looks for use_cache, output_attentions, and
-                output_hidden_states keyword arguments, which control whether additional properties should be
-                added to the output.
+        # use_cache = kwargs.get("use_cache", False) # question – what is the cache for? 
+        # output_attentions = kwargs.get("output_attentions", False)
+        # output_hidden_states = kwargs.get("output_hidden_states", False)
 
-        Returns:
-            The output of the model, which is a `GenerativeSequenceModelOutput` object.
-        """
-        use_cache = kwargs.get("use_cache", False)
-        output_attentions = kwargs.get("output_attentions", False)
-        output_hidden_states = kwargs.get("output_hidden_states", False)
+        context, query, answer = batch
+        encoded_context = self.context_encoder(context, **kwargs)
+        encoded_query = self.query_encoder(query, **kwargs)
+        output = self.output_layer(encoded_context.last_hidden_state, encoded_query, answer)
 
-        encoded = self.encoder(batch, **kwargs)
-
-        output = self.output_layer(batch, encoded.last_hidden_state, is_generation=is_generation)
-
-        if use_cache:
-            output["past_key_values"] = encoded.past_key_values
-
-        if output_attentions:
-            output["attentions"] = encoded.attentions
-
-        if output_hidden_states:
-            output["hidden_states"] = encoded.hidden_states
+        # if use_cache:
+        #     output["past_key_values"] = encoded_context.past_key_values
+        # if output_attentions:
+        #     output["attentions"] = encoded_context.attentions
+        # if output_hidden_states:
+        #     output["hidden_states"] = encoded_context.hidden_states
 
         return output

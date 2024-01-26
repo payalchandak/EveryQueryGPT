@@ -275,6 +275,9 @@ class DataEmbeddingLayer(torch.nn.Module):
         self.split_by_measurement_indices = split_by_measurement_indices
         self.do_normalize_by_measurement_index = do_normalize_by_measurement_index
 
+        # question – what is the default setting for this? 
+        # the config just specifies the following
+        # static_embedding_mode: StaticEmbeddingMode = StaticEmbeddingMode.SUM_ALL
         if static_embedding_mode != StaticEmbeddingMode.DROP:
             if static_weight < 0:
                 raise ValueError("`static_weight` must be non-negative.")
@@ -292,6 +295,7 @@ class DataEmbeddingLayer(torch.nn.Module):
 
         self.n_total_embeddings = n_total_embeddings
 
+        # question - is the joint mode preferred? why? 
         if categorical_embedding_dim is None and numerical_embedding_dim is None:
             self.embedding_mode = EmbeddingMode.JOINT
             self.embed_layer = torch.nn.EmbeddingBag(
@@ -392,6 +396,7 @@ class DataEmbeddingLayer(torch.nn.Module):
             values = torch.ones_like(indices, dtype=torch.float32)
         else:
             values = torch.where(values_mask, values, 1)
+            # question should I also use 1 instead of 0 when values are not defined for a code
 
         if self.do_normalize_by_measurement_index:
             values *= self.get_measurement_index_normalziation(measurement_indices)
@@ -460,6 +465,14 @@ class DataEmbeddingLayer(torch.nn.Module):
 
         return self.categorical_weight * cat_embeds + self.numerical_weight * num_embeds
 
+
+    # question how can we embed the min and max values along with the code idx 
+    # since this fn expects values to have dim ``(batch_size, num_measurements)`` 
+    # and each code can only have one value in this set up? 
+    # but in a query we have a range (ie. two values) per code
+
+    # question 2 - what is the diff between indices and measurement_indices ?? 
+    # i think measurement_indices is code idx... what is indices? measurement type??? 
     def _embed(
         self,
         indices: torch.Tensor,
@@ -581,6 +594,7 @@ class DataEmbeddingLayer(torch.nn.Module):
         out_shape = (batch_size, sequence_length, self.out_dim)
 
         if self.split_by_measurement_indices:
+            # question -- what is this about?
             categorical_mask, numerical_mask = self._split_batch_into_measurement_index_buckets(batch)
             _, _, num_measurement_buckets, _ = categorical_mask.shape
             out_shape = (batch_size, sequence_length, num_measurement_buckets, self.out_dim)
@@ -597,6 +611,7 @@ class DataEmbeddingLayer(torch.nn.Module):
             values_mask = batch["dynamic_values_mask"].unsqueeze(-2).expand(*expand_shape)
             values_mask = values_mask & numerical_mask
         else:
+            # question how do i convert a code idx, min val, max val, and has val into these fields 
             indices = batch["dynamic_indices"]
             values = batch["dynamic_values"]
             measurement_indices = batch["dynamic_measurement_indices"]
@@ -690,11 +705,14 @@ class DataEmbeddingLayer(torch.nn.Module):
             >>> out.shape # batch, seq_len, dependency graph length (split_by_measruement_indices), out_dim
             torch.Size([2, 3, 2, 10])
         """
+        # question -- why would it have num_measurement_buckets as a dim? 
         embedded = self._dynamic_embedding(batch)
         # embedded is of shape (batch_size, sequence_length, out_dim) or of shape
         # (batch_size, sequence_length, num_measurement_buckets, out_dim)
 
-        mask = batch.event_mask
+        # question - what is in the event mask? i dont have this for the query
+        # question 2 - what does batch actually look like at this point? 
+        mask = batch.event_mask 
         while len(mask.shape) < len(embedded.shape):
             mask = mask.unsqueeze(-1)
 
