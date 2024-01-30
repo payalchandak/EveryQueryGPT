@@ -53,22 +53,6 @@ dataloader = torch.utils.data.DataLoader(
 for batch in dataloader: 
     inputs, query, answer = batch 
     break 
-
-batch_size = query['code_idx'].shape[0]
-
-indices = query['code_idx'].unsqueeze(1).expand(-1,2)
-values_mask = query['code_has_value'].unsqueeze(1).expand(-1,2)
-values = torch.cat([query['range_min'].unsqueeze(1), query['range_max'].unsqueeze(1)], dim=-1)
-
-print(batch_size)
-
-print(query['range_min'])
-print(query['range_max'])
-print()
-
-
-# data/data_embedding_layer.py
-# data embedding layer to reuse 
+    
 # CIPPT -> encoder -> input_layer -> data_embedding_layer 
-# data_embedding_layer has several "modes", check to use one...  
 # ESGPT train -> define LM -> line 109 in LM to initialize model -> encoder 

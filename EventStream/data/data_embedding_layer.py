@@ -1,3 +1,4 @@
+import code
 import enum
 from typing import Union
 
@@ -321,6 +322,7 @@ class DataEmbeddingLayer(torch.nn.Module):
                 padding_idx=0,
             )
             self.num_proj = torch.nn.Linear(numerical_embedding_dim, out_dim)
+            self.query_temporal_proj = torch.nn.Linear(2, out_dim) # (todo) try deeper MLP? 
 
     @staticmethod
     def get_measurement_index_normalziation(measurement_indices: torch.Tensor) -> torch.Tensor:
@@ -627,7 +629,12 @@ class DataEmbeddingLayer(torch.nn.Module):
         values = torch.cat([query['range_min'].unsqueeze(1), query['range_max'].unsqueeze(1)], dim=-1)
         meas_indices = torch.ones(indices.size) # measurements indices are code type, like diagnosis or lab etc 
         cat_mask = torch.ones(indices.size) 
-        embedded = self._embed(indices, meas_indices, values, values_mask, cat_mask)
+        code_embed = self._embed(indices, meas_indices, values, values_mask, cat_mask)
+
+        time = torch.cat([query['start_offset'].unsqueeze(1), query['duration'].unsqueeze(1)], dim=-1)
+        time_embed = self.query_temporal_proj(time)
+
+        embedded = code_embed + time_embed
         return embedded
     
     def forward(self, batch: PytorchBatch) -> torch.Tensor:
@@ -730,32 +737,3 @@ class DataEmbeddingLayer(torch.nn.Module):
                 return torch.where(mask, embedded, torch.zeros_like(embedded))
             case _:
                 raise ValueError(f"Invalid static embedding mode: {self.static_embedding_mode}")
-
-
-'''
-Notes
-
-- call _embed directly instead of forward
-- dynamic indices is code idx
-- dynamic measurements indices are code type, like diagnosis or lab etc 
-- values mask 
-- shapes are in 621
-- ultimately, we get (batch_size * number of data elements per event)
-- repeat the codeidx and have number data elements be 2
-- measurement indices default value should be 1s 
-- start with setting do_normalize_by_measuremnt_index as false 
-- we want to call split embeddings not joint 
-- values can be None when missing 
-- cat mask is always True 
-
-use 1 instead of 0 when values are not defined for a code
-self._embed(indices_2D, meas_indices_2D, values_2D, values_mask_2D, categorical_mask_2D)
-
-- time embedding is small MLP embedder 
-- normalizing the time? how? 
-    - start time offset norm: collect empirically for now and fix it 
-    - duration can be mix max 1 hour to 1 year 
-- self normalizing neural network? https://arxiv.org/abs/1706.02515
-    SELU layer in pytorch 
-
-'''

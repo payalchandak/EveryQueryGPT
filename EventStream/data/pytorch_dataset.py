@@ -536,13 +536,20 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         # config params (all in min) 
         min_query_duration = 60 # 1 hour
         max_query_duration = 60*24*365 # 1 year
-        min_input_duration = 60*24 # 1 day
 
         # sample query duration
         start_time = full_subj_data["start_time"].timestamp() / 60 # minutes 
+        if self.config.do_include_start_time_min:
+            # Note that this is using the python datetime module's `timestamp` function which differs from
+            # some dataframe libraries' timestamp functions (e.g., polars).
+            full_subj_data["start_time"] = full_subj_data["start_time"].timestamp() / 60.0
+        else:
+            full_subj_data.pop("start_time")
         times = np.array([sum(full_subj_data["time_delta"][:i]) for i in range(1, len(full_subj_data["time_delta"])+1)])
         record_duration = times[-1]
+        min_input_duration = times[1] # so that we have at least one event in input
         query_duration = np.random.randint(min_query_duration, min(max_query_duration, record_duration-min_input_duration))
+        normalized_query_duration = (query_duration - min_query_duration) / (max_query_duration - min_query_duration)
 
         # sample input start and end 
         max_input_end_time = start_time + record_duration - query_duration
@@ -554,12 +561,15 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             input_start_idx = 0
             input_end_idx = max_input_end_idx
 
-        # sample query start offset and get indices  
-        query_start_offset = np.random.sample() * (record_duration - times[input_end_idx] - query_duration)
+        # sample query start offset and get indices 
+        min_query_start_offset = 0
+        max_query_start_offset = 60*24*365*5 # 5 years
+        query_start_offset = np.random.sample() * min((record_duration - times[input_end_idx] - query_duration), max_query_start_offset)
         query_start_time = start_time + times[input_end_idx] + query_start_offset
         query_end_time = query_start_time + query_duration
         query_start_idx = np.min(np.argwhere((times+start_time) >= query_start_time))
         query_end_idx = np.min(np.argwhere((times+start_time) >= query_end_time))
+        normalized_query_start_offset = (query_start_offset - min_query_start_offset) / (max_query_start_offset - min_query_start_offset)
 
         # code and range
         code_name, code_idx, code_has_value =  self.config.sample_code() 
@@ -594,17 +604,14 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
                     full_subj_data[k] = full_subj_data[k][input_start_idx : input_end_idx]
 
         query = {
-            'start_offset': query_start_offset,
-            'duration': query_duration,
+            'start_offset': normalized_query_start_offset,
+            'duration': normalized_query_duration,
             'code_name': code_name,
             'code_idx': code_idx,
             'code_has_value': code_has_value,
             'range_min': range_min, 
             'range_max': range_max, 
         } 
-
-        # (todo) - add normalization for query offset and duration, start with default value of 0 and 1 
-
         return full_subj_data, query, answer
 
     def __static_and_dynamic_collate(
@@ -793,7 +800,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         
         collated_queries = {
             'start_offset': torch.tensor([q['start_offset'] for q in queries], dtype=torch.float),
-            'duration': torch.tensor([q['duration'] for q in queries], dtype=torch.int64),
+            'duration': torch.tensor([q['duration'] for q in queries], dtype=torch.float),
             # 'code_names': Skip strings 
             'code_idx': torch.tensor([q['code_idx'] for q in queries], dtype=torch.int64),
             'code_has_value': torch.tensor([q['code_has_value'] for q in queries], dtype=torch.bool),
@@ -802,7 +809,6 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         }
 
         # todo: batch normalize start_offset and duration ? 
-
         collated_answers = torch.tensor(answers, dtype=torch.int64)
 
         batch = collated_inputs, collated_queries, collated_answers
