@@ -30,7 +30,6 @@ from ..utils import (
 from .time_dependent_functor import AgeFunctor, TimeDependentFunctor, TimeOfDayFunctor
 from .types import DataModality, InputDataType, InputDFType, TemporalityType
 from .vocabulary import Vocabulary
-from EventStream.data.dataset_polars import Dataset
 
 # Represents the type for a column name in a dataframe.
 DF_COL = Union[str, Sequence[str]]
@@ -1058,6 +1057,8 @@ class PytorchDatasetConfig(JSONableMixin):
         return all_files
     
     def sample_code(self)->tuple[str, int, bool]: 
+
+        from EventStream.data.dataset_polars import Dataset # (todo) circular import dependency if you move it out  
         codes = []
         vocab = Dataset.load(self.save_dir).unified_vocabulary_idxmap
         for key, cfg in self.measurement_configs.items(): 

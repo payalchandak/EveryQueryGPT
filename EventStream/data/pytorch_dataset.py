@@ -603,6 +603,8 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             'range_max': range_max, 
         } 
 
+        # (todo) - add normalization for query offset and duration, start with default value of 0 and 1 
+
         return full_subj_data, query, answer
 
     def __static_and_dynamic_collate(
@@ -788,11 +790,11 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             collated_inputs = self.__static_and_dynamic_collate(inputs, do_convert_float_nans=do_convert_float_nans)
         else:
             collated_inputs = self.__dynamic_only_collate(inputs, do_convert_float_nans=do_convert_float_nans)
-
+        
         collated_queries = {
             'start_offset': torch.tensor([q['start_offset'] for q in queries], dtype=torch.float),
             'duration': torch.tensor([q['duration'] for q in queries], dtype=torch.int64),
-            # 'code_names': Skip for now
+            # 'code_names': Skip strings 
             'code_idx': torch.tensor([q['code_idx'] for q in queries], dtype=torch.int64),
             'code_has_value': torch.tensor([q['code_has_value'] for q in queries], dtype=torch.bool),
             'range_min': torch.tensor([q['range_min'] for q in queries], dtype=torch.float),
@@ -801,7 +803,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
 
         # todo: batch normalize start_offset and duration ? 
 
-        collated_answers = torch.FloatTensor(answers)
+        collated_answers = torch.tensor(answers, dtype=torch.int64)
 
         batch = collated_inputs, collated_queries, collated_answers
 
