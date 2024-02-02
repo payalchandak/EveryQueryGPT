@@ -10,7 +10,6 @@ except ImportError:
     pass  # no need to fail because of missing dev dependency
 
 from typing import Any
-
 import hydra
 import wandb
 from omegaconf import DictConfig

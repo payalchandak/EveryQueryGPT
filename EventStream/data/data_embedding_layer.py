@@ -628,6 +628,7 @@ class DataEmbeddingLayer(torch.nn.Module):
         values_mask = query['code_has_value'].unsqueeze(1).expand(-1,2)
         values = torch.cat([query['range_min'].unsqueeze(1), query['range_max'].unsqueeze(1)], dim=-1)
         meas_indices = torch.ones(indices.size) # measurements indices are code type, like diagnosis or lab etc 
+        # (todo) change to include the actual code type -- update code sampling fn 
         cat_mask = torch.ones(indices.size) 
         code_embed = self._embed(indices, meas_indices, values, values_mask, cat_mask)
 

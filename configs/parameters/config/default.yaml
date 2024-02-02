@@ -23,7 +23,7 @@ attention_dropout:
   max: 0.5
 
 structured_event_processing_mode:
-  values: ["conditionally_independent", "nested_attention"]
+  values: ["conditionally_independent"]
 seq_attention_types:
   values: [["global"], ["global", "local"]]
 seq_window_size:
@@ -32,7 +32,7 @@ seq_window_size:
 do_full_block_in_seq_attention:
   values: [True, False]
 do_full_block_in_dep_graph_attention:
-  values: [True, False]
+  values: [False]
 
 TTE_generation_layer_type:
   values: ["exponential", "log_normal_mixture"]
@@ -61,5 +61,5 @@ categorical_embedding_weight:
 do_use_learnable_sinusoidal_ATE:
   values: [True, False]
 
-measurements_per_dep_graph_level:
-  values: ???
+# measurements_per_dep_graph_level:
+#   values: ???

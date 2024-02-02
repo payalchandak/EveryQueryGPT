@@ -517,9 +517,9 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         """
         return self._seeded_getitem(idx)
 
+    def _seeded_getitem(...) #(todo)
     @SeedableMixin.WithSeed
     @TimeableMixin.TimeAs
-    def _seeded_getitem(self, idx: int) -> dict[str, list]:
         """Returns a Returns a dictionary corresponding to a single subject's data.
 
         This function is automatically seeded for robustness. See `__getitem__` for a description of the
@@ -570,6 +570,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         query_start_idx = np.min(np.argwhere((times+start_time) >= query_start_time))
         query_end_idx = np.min(np.argwhere((times+start_time) >= query_end_time))
         normalized_query_start_offset = (query_start_offset - min_query_start_offset) / (max_query_start_offset - min_query_start_offset)
+    
 
         # code and range
         code_name, code_idx, code_has_value =  self.config.sample_code() 

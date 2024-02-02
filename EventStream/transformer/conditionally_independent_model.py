@@ -27,7 +27,8 @@ class EveryQueryOutputLayer():
         config: StructuredTransformerConfig,
     ):
         super().__init__()
-        self.proj = torch.nn.Linear(config.hidden_size + config.query_hidden_size, 1) 
+        self.proj = torch.nn.Linear(config.hidden_size*2, 1) 
+        # self.proj = torch.nn.Linear(config.hidden_size*2 + config.query_hidden_size, 1) 
         # (todo) update config to include query_hidden_size 
 
     def forward(
@@ -38,15 +39,12 @@ class EveryQueryOutputLayer():
     ) -> torch.FloatTensor:
         
         embed = self.proj(torch.cat([encoded_context, encoded_query], dim=0)) # (todo) check the dim
-        
         # torch.nn.functional.elu has Image (-1, 1), but we need our rate parameter to be > 0. So we need to
         # add 1 to the output here. To ensure validity given numerical imprecision, we also add a buffer given
         # by the smallest possible positive value permissible given the type of `embed`.
         rate = torch.nn.functional.elu(embed) + 1 + torch.finfo(embed.dtype).tiny
         rate = rate.squeeze(dim=-1) # Squeeze from (batch_size, 1) to (batch_size)
-
-        loss = torch.distributions.Poisson(rate).log_prob(answer) 
-
+        loss = torch.distributions.Poisson(rate).log_prob(answer) # direct computation might be faster? 
         return loss 
         
 
@@ -79,7 +77,8 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
             raise ValueError(f"{config.structured_event_processing_mode} invalid!")
 
         self.context_encoder = ConditionallyIndependentPointProcessTransformer(config)
-        self.query_encoder = None
+        self.query_embedding_layer = self.context_encoder.input_layer.data_embedding_layer.query_embedding
+        self.query_encoder = None # MLP or CIPPT?? 
         self.output_layer = EveryQueryOutputLayer(config)
 
     def forward(self, batch: PytorchBatch, **kwargs) -> torch.FloatTensor: 
@@ -90,7 +89,8 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
 
         context, query, answer = batch
         encoded_context = self.context_encoder(context, **kwargs)
-        encoded_query = self.query_encoder(query, **kwargs)
+        query_embed = self.query_embedding_layer(query, **kwargs) 
+        encoded_query = query_embed # self.query_encoder(query_embed, **kwargs)
         loss = self.output_layer(encoded_context.last_hidden_state, encoded_query, answer)
 
         # if use_cache:

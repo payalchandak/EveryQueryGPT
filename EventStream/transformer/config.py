@@ -490,7 +490,7 @@ class StructuredTransformerConfig(PretrainedConfig):
         measurements_idxmap: dict[str, dict[Hashable, int]] | None = None,
         measurements_per_generative_mode: dict[DataModality, list[str]] | None = None,
         event_types_idxmap: dict[str, int] | None = None,
-        measurements_per_dep_graph_level: list[list[MEAS_INDEX_GROUP_T]] | None = None,
+        # measurements_per_dep_graph_level: list[list[MEAS_INDEX_GROUP_T]] | None = None,
         max_seq_len: int = 256,
         do_split_embeddings: bool = False,
         categorical_embedding_dim: int | None = None,
@@ -599,39 +599,39 @@ class StructuredTransformerConfig(PretrainedConfig):
             f"For a {structured_event_processing_mode} model, {{}} is not used; got {{}}. Setting " "to None."
         )
         match structured_event_processing_mode:
-            case StructuredEventProcessingMode.NESTED_ATTENTION:
-                if do_full_block_in_seq_attention is None:
-                    raise ValueError(missing_param_err_tmpl.format("do_full_block_in_seq_attention"))
-                if do_full_block_in_dep_graph_attention is None:
-                    raise ValueError(missing_param_err_tmpl.format("do_full_block_in_dep_graph_attention"))
-                if measurements_per_dep_graph_level is None:
-                    raise ValueError(missing_param_err_tmpl.format("measurements_per_dep_graph_level"))
+            # case StructuredEventProcessingMode.NESTED_ATTENTION:
+            #     if do_full_block_in_seq_attention is None:
+            #         raise ValueError(missing_param_err_tmpl.format("do_full_block_in_seq_attention"))
+            #     if do_full_block_in_dep_graph_attention is None:
+            #         raise ValueError(missing_param_err_tmpl.format("do_full_block_in_dep_graph_attention"))
+            #     if measurements_per_dep_graph_level is None:
+            #         raise ValueError(missing_param_err_tmpl.format("measurements_per_dep_graph_level"))
 
-                proc_measurements_per_dep_graph_level = []
-                for group in measurements_per_dep_graph_level:
-                    proc_group = []
-                    for meas_index in group:
-                        match meas_index:
-                            case str():
-                                proc_group.append(meas_index)
-                            case [str() as meas_index, (str() | MeasIndexGroupOptions()) as mode]:
-                                assert mode in MeasIndexGroupOptions.values()
-                                proc_group.append((meas_index, mode))
-                            case _:
-                                raise ValueError(
-                                    f"Invalid `measurements_per_dep_graph_level` entry {meas_index}."
-                                )
-                    proc_measurements_per_dep_graph_level.append(proc_group)
-                measurements_per_dep_graph_level = proc_measurements_per_dep_graph_level
+            #     proc_measurements_per_dep_graph_level = []
+            #     for group in measurements_per_dep_graph_level:
+            #         proc_group = []
+            #         for meas_index in group:
+            #             match meas_index:
+            #                 case str():
+            #                     proc_group.append(meas_index)
+            #                 case [str() as meas_index, (str() | MeasIndexGroupOptions()) as mode]:
+            #                     assert mode in MeasIndexGroupOptions.values()
+            #                     proc_group.append((meas_index, mode))
+            #                 case _:
+            #                     raise ValueError(
+            #                         f"Invalid `measurements_per_dep_graph_level` entry {meas_index}."
+            #                     )
+            #         proc_measurements_per_dep_graph_level.append(proc_group)
+            #     measurements_per_dep_graph_level = proc_measurements_per_dep_graph_level
 
             case StructuredEventProcessingMode.CONDITIONALLY_INDEPENDENT:
-                if measurements_per_dep_graph_level is not None:
-                    logger.warning(
-                        extra_param_err_tmpl.format(
-                            "measurements_per_dep_graph_level", measurements_per_dep_graph_level
-                        )
-                    )
-                    measurements_per_dep_graph_level = None
+                # if measurements_per_dep_graph_level is not None:
+                #     logger.warning(
+                #         extra_param_err_tmpl.format(
+                #             "measurements_per_dep_graph_level", measurements_per_dep_graph_level
+                #         )
+                #     )
+                #     measurements_per_dep_graph_level = None
                 if do_full_block_in_seq_attention is not None:
                     logger.warning(
                         extra_param_err_tmpl.format(
@@ -796,7 +796,7 @@ class StructuredTransformerConfig(PretrainedConfig):
         self.vocab_offsets_by_measurement = vocab_offsets_by_measurement
         self.measurements_idxmap = measurements_idxmap
         self.measurements_per_generative_mode = measurements_per_generative_mode
-        self.measurements_per_dep_graph_level = measurements_per_dep_graph_level
+        # self.measurements_per_dep_graph_level = measurements_per_dep_graph_level
 
         self.vocab_size = max(sum(self.vocab_sizes_by_measurement.values()), 1)
 
@@ -855,20 +855,20 @@ class StructuredTransformerConfig(PretrainedConfig):
             if k not in self.measurements_per_generative_mode:
                 self.measurements_per_generative_mode[k] = []
 
-        if self.structured_event_processing_mode == StructuredEventProcessingMode.NESTED_ATTENTION:
-            in_dep = {
-                x[0] if isinstance(x, (list, tuple)) and len(x) == 2 else x
-                for x in itertools.chain.from_iterable(self.measurements_per_dep_graph_level)
-            }
-            in_generative_mode = set(
-                itertools.chain.from_iterable(self.measurements_per_generative_mode.values())
-            )
+        # if self.structured_event_processing_mode == StructuredEventProcessingMode.NESTED_ATTENTION:
+        #     in_dep = {
+        #         x[0] if isinstance(x, (list, tuple)) and len(x) == 2 else x
+        #         for x in itertools.chain.from_iterable(self.measurements_per_dep_graph_level)
+        #     }
+        #     in_generative_mode = set(
+        #         itertools.chain.from_iterable(self.measurements_per_generative_mode.values())
+        #     )
 
-            if not in_generative_mode.issubset(in_dep):
-                raise ValueError(
-                    "Config is attempting to generate something outside the dependency graph:\n"
-                    f"{in_generative_mode - in_dep}"
-                )
+        #     if not in_generative_mode.issubset(in_dep):
+        #         raise ValueError(
+        #             "Config is attempting to generate something outside the dependency graph:\n"
+        #             f"{in_generative_mode - in_dep}"
+        #         )
 
         self.event_types_idxmap = dataset.vocabulary_config.event_types_idxmap
 
