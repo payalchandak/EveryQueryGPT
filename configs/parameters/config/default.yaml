@@ -1,8 +1,6 @@
 head_dim:
   min: 2
   max: 64
-hidden_size:
-  value: "null"
 intermediate_size:
   min: 32
   max: 1028
@@ -43,7 +41,7 @@ TTE_lognormal_generation_num_components:
 static_embedding_mode:
   values: ["sum_all", "drop"]
 do_normalize_by_measurement_index:
-  values: [True, False]
+  values: [False]
 do_split_embeddings:
   values: [True, False]
 categorical_embedding_dim:

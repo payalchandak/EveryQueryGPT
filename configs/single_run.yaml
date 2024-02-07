@@ -54,6 +54,7 @@ trainer_config:
   devices: auto
   detect_anomaly: false
   log_every_n_steps: 50
+  strategy: ddp_find_unused_parameters_true
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
   name: everyquery

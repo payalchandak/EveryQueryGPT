@@ -502,6 +502,7 @@ class PretrainConfig:
             "detect_anomaly": False,
             "default_root_dir": "${save_dir}/model_checkpoints",
             "log_every_n_steps": 10,
+            "strategy": None,
         }
     )
 
@@ -623,7 +624,6 @@ def train(cfg: PretrainConfig):
         **cfg.trainer_config,
         max_epochs=optimization_config.max_epochs,
         callbacks=callbacks,
-        strategy = 'ddp_find_unused_parameters_true', # (todo) remove
     )
 
     if cfg.wandb_logger_kwargs.get("name", None):
