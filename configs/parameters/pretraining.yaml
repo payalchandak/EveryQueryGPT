@@ -8,7 +8,7 @@ defaults:
   - trainer_config: default
 
 experiment_dir:
-  value: ???
+  value: /storage2/payal/every_query_models/
 do_overwrite:
   value: False
 

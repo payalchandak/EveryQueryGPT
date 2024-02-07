@@ -39,7 +39,6 @@ from ..config import (
     StructuredTransformerConfig,
 )
 from ..model_output import GenerativeSequenceModelOutput
-from ..nested_attention_model import NAPPTForGenerativeSequenceModeling
 from ..utils import expand_indexed_regression, str_summary
 
 
@@ -96,15 +95,16 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         )
         self.build_metrics()
 
-        match config.structured_event_processing_mode:
-            case StructuredEventProcessingMode.NESTED_ATTENTION:
-                model_cls = NAPPTForGenerativeSequenceModeling
-            case StructuredEventProcessingMode.CONDITIONALLY_INDEPENDENT:
-                model_cls = CIPPTForGenerativeSequenceModeling
-            case _:
-                raise ValueError(
-                    f"Unsupported structured event processing mode: {config.structured_event_processing_mode}"
-                )
+        # match config.structured_event_processing_mode:
+        #     case StructuredEventProcessingMode.NESTED_ATTENTION:
+        #         model_cls = NAPPTForGenerativeSequenceModeling
+        #     case StructuredEventProcessingMode.CONDITIONALLY_INDEPENDENT:
+        #         model_cls = CIPPTForGenerativeSequenceModeling
+        #     case _:
+        #         raise ValueError(
+        #             f"Unsupported structured event processing mode: {config.structured_event_processing_mode}"
+        #         )
+        model_cls = CIPPTForGenerativeSequenceModeling
             
         # initializing model here, should always be CIPPTForGenerativeSequenceModeling
             
@@ -238,7 +238,6 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                                 **metric_cls_kwargs, **averaging_kwargs
                             )
 
-    # can stay
     def _log_metric_dict(
         self,
         preds: torch.Tensor,
@@ -288,35 +287,6 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                     f"with preds ({str_summary(preds)}) and labels ({str_summary(labels)}): {e}."
                 )
 
-    # can go
-    def log_tte_metrics(self, results: GenerativeSequenceModelOutput, split: Split):
-        # The output of the model for time-to-event (and for regression targets as well) are pytorch
-        # distribution objects, not scalars. So, for some evaluation metrics, we need to sample values from
-        # those distributions to assess the metric.
-        # TODO(mmd): We should likely be able to control how many samples are used, to minimize variance of
-        # these results.
-        tte_dist = results["preds"]["time_to_event"]
-        tte_preds = tte_dist.sample()
-
-        # After sampling, we also need to slice this down to just those intra-event-times that are actually
-        # observed. This means we should drop the last sequence element (slice to `[:, :-1]` (as our observed
-        # intra-event-times will only exist for the interior of our sequence), then further filter down to
-        # just elements of the prediction for which the next sequence element was not masked
-        # (mask via `results['event_mask'][:, 1:]`). We also need to filter the observed labels down to also
-        # only be present for sequence elements where the next sequence element was truly observed.
-        tte_preds = tte_preds[:, :-1][results["event_mask"][:, 1:]]
-        tte_labels = results["labels"]["time_to_event"][results["event_mask"][:, 1:]]
-
-        # Finally, we can log all relevant TTE metrics given these predictions and labels.
-        self._log_metric_dict(
-            preds=tte_preds,
-            labels=tte_labels,
-            metrics=self.tte_metrics,
-            measurement="TTE",
-            split=split,
-            cat=MetricCategories.TTE,
-        )
-
     def log_metrics(self, results: GenerativeSequenceModelOutput, split: Split):
         """Logs metric results for a given output result.
 
@@ -329,6 +299,8 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         # We always want to log the raw loss.
         log_kwargs = {"batch_size": self.optimization_config.batch_size, "sync_dist": True}
         self.log(f"{split}_loss", results["loss"], **log_kwargs)
+
+        return 
 
         if self.metrics_config.do_log_only_loss(split):
             return
@@ -344,10 +316,6 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                 **log_kwargs,
             )
             self.log(f"{split}_TTE_reg_NLL", results["losses"]["time_to_event"], **log_kwargs)
-
-        # Time-to-event
-        if self.metrics_config.do_log(split, MetricCategories.TTE):
-            self.log_tte_metrics(results, split)
 
         # Per data type
         for measurement, metrics_dict in self.metrics.items():
@@ -543,6 +511,7 @@ class PretrainConfig:
     wandb_logger_kwargs: dict[str, Any] = dataclasses.field(
         default_factory=lambda: {
             "name": "generative_event_stream_transformer",
+            "entity": None,
             "project": None,
             "team": None,
             "log_model": True,
@@ -654,6 +623,7 @@ def train(cfg: PretrainConfig):
         **cfg.trainer_config,
         max_epochs=optimization_config.max_epochs,
         callbacks=callbacks,
+        strategy = 'ddp_find_unused_parameters_true', # (todo) remove
     )
 
     if cfg.wandb_logger_kwargs.get("name", None):

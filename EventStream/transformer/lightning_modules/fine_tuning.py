@@ -286,6 +286,7 @@ class FinetuneConfig:
     wandb_logger_kwargs: dict[str, Any] = dataclasses.field(
         default_factory=lambda: {
             "name": "${task_df_name}_finetuning",
+            "entity": None,
             "project": None,
             "team": None,
             "log_model": True,

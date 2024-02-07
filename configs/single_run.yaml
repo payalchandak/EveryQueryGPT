@@ -1,0 +1,65 @@
+defaults:
+  - pretrain_config
+  - _self_
+
+do_overwrite: false
+seed: 1
+config:
+  do_use_learnable_sinusoidal_ATE: false
+  do_split_embeddings: true
+  categorical_embedding_dim: 128
+  numerical_embedding_dim: 128
+  static_embedding_mode: sum_all
+  static_embedding_weight: 0.5
+  dynamic_embedding_weight: 0.5
+  categorical_embedding_weight: 0.5
+  numerical_embedding_weight: 0.5
+  do_normalize_by_measurement_index: false
+  structured_event_processing_mode: conditionally_independent
+  num_hidden_layers: 8
+  seq_attention_types:
+  - global
+  head_dim: 64
+  hidden_size: null
+  num_attention_heads: 8
+  attention_dropout: 0.1
+  input_dropout: 0.1
+  resid_dropout: 0.1
+  intermediate_size: 256
+optimization_config:
+  init_lr: 1e-3
+  end_lr_frac_of_init_lr: 0.1
+  end_lr: null
+  max_epochs: 100
+  batch_size: 128
+  validation_batch_size: 32
+  lr_frac_warmup_steps: 0.05
+  lr_decay_power: 1
+  weight_decay: 0.1
+  patience: 5
+  gradient_accumulation: null
+  num_dataloader_workers: 15
+data_config:
+  save_dir: /storage/shared/mgh-hf-dataset/processed/ESD_09-01-23-1/
+  max_seq_len: 128
+  min_seq_len: 32
+  train_subset_size: FULL
+  train_subset_seed: null
+  task_df_name: null
+  do_include_subsequence_indices: false
+  do_include_subject_id: false
+  do_include_start_time_min: false
+trainer_config:
+  accelerator: auto
+  devices: auto
+  detect_anomaly: false
+  log_every_n_steps: 50
+experiment_dir: /storage2/payal/every_query_models/
+wandb_logger_kwargs:
+  name: everyquery
+  entity: payal-collabs
+  project: EveryQueryGPT
+  team: null
+  log_model: true
+  do_log_graph: true
+do_final_validation_on_metrics: true

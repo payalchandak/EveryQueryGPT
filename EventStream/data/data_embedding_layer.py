@@ -322,7 +322,8 @@ class DataEmbeddingLayer(torch.nn.Module):
                 padding_idx=0,
             )
             self.num_proj = torch.nn.Linear(numerical_embedding_dim, out_dim)
-            self.query_temporal_proj = torch.nn.Linear(2, out_dim) # (todo) try deeper MLP? 
+        
+        self.query_temporal_proj = torch.nn.Linear(2, out_dim) # (todo) try deeper MLP? 
 
     @staticmethod
     def get_measurement_index_normalziation(measurement_indices: torch.Tensor) -> torch.Tensor:
@@ -627,9 +628,9 @@ class DataEmbeddingLayer(torch.nn.Module):
         indices = query['code_idx'].unsqueeze(1).expand(-1,2)
         values_mask = query['code_has_value'].unsqueeze(1).expand(-1,2)
         values = torch.cat([query['range_min'].unsqueeze(1), query['range_max'].unsqueeze(1)], dim=-1)
-        meas_indices = torch.ones(indices.size) # measurements indices are code type, like diagnosis or lab etc 
+        meas_indices = query['_code_type'].unsqueeze(1).expand(-1,2) # measurements indices are code type, like diagnosis or lab etc 
         # (todo) change to include the actual code type -- update code sampling fn 
-        cat_mask = torch.ones(indices.size) 
+        cat_mask = query['_cat_mask'].unsqueeze(1).expand(-1,2)
         code_embed = self._embed(indices, meas_indices, values, values_mask, cat_mask)
 
         time = torch.cat([query['start_offset'].unsqueeze(1), query['duration'].unsqueeze(1)], dim=-1)

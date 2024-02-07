@@ -517,9 +517,9 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         """
         return self._seeded_getitem(idx)
 
-    def _seeded_getitem(...) #(todo)
     @SeedableMixin.WithSeed
     @TimeableMixin.TimeAs
+    def _seeded_getitem(self, idx: int) -> tuple:
         """Returns a Returns a dictionary corresponding to a single subject's data.
 
         This function is automatically seeded for robustness. See `__getitem__` for a description of the
@@ -591,6 +591,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
                 if query_dynamic_indices[i][j] == code_idx:
                     if code_has_value: 
                         x = query_dynamic_values[i][j]
+                        if x is None: continue # todo: check sometimes None –– outlier detector?  
                         if (x>=range_min) and (x<=range_max): 
                             answer += 1
                     else: 
@@ -806,7 +807,9 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             'code_idx': torch.tensor([q['code_idx'] for q in queries], dtype=torch.int64),
             'code_has_value': torch.tensor([q['code_has_value'] for q in queries], dtype=torch.bool),
             'range_min': torch.tensor([q['range_min'] for q in queries], dtype=torch.float),
-            'range_max': torch.tensor([q['range_max'] for q in queries], dtype=torch.float)
+            'range_max': torch.tensor([q['range_max'] for q in queries], dtype=torch.float),
+            '_code_type': torch.tensor([1.0 for q in queries], dtype=torch.float),
+            '_cat_mask':torch.tensor([True for q in queries], dtype=torch.bool),
         }
 
         # todo: batch normalize start_offset and duration ? 

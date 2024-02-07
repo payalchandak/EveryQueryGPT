@@ -1,5 +1,5 @@
 save_dir:
-  value: ???
+  value: /storage/shared/mgh-hf-dataset/processed/ESD_09-01-23-1/
 max_seq_len:
   min: 16
   max: 512

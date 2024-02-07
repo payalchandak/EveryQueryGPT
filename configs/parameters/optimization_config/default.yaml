@@ -1,11 +1,11 @@
 num_dataloader_workers:
-  value: ???
+  value: 64
 max_epochs:
   value: 100
 patience:
   value: 5
 batch_size:
-  min: 8
+  min: 32
   max: 128
 lr_frac_warmup_steps:
   distribution: log_uniform_values
