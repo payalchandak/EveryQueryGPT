@@ -5,6 +5,6 @@ project:
 entity:
   value: ${entity}
 do_log_graph:
-  value: False
+  value: True
 log_model:
-  value: False
+  value: True

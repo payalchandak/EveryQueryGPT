@@ -54,8 +54,12 @@ class EveryQueryOutputLayer(torch.nn.Module):
         # by the smallest possible positive value permissible given the type of `embed`.
         rate = torch.nn.functional.elu(embed) + 1 + torch.finfo(embed.dtype).tiny
         rate = rate.squeeze(dim=-1) # Squeeze from (batch_size, 1) to (batch_size)
-        loss = torch.distributions.Poisson(rate).log_prob(answer).sum() # direct computation might be faster? 
-        out = {'loss':loss}
+        loss = - torch.distributions.Poisson(rate).log_prob(answer).sum()
+        out = {
+            'loss':loss, 
+            'predicted_rate':rate.squeeze(),
+            'unnormalized_rate':embed.squeeze(),
+        }
         return out 
         
 

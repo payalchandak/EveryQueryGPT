@@ -22,6 +22,7 @@ from torchmetrics.classification import (
     MultilabelAveragePrecision,
 )
 from transformers import get_polynomial_decay_schedule_with_warmup
+import wandb, numpy as np 
 
 from ...data.config import PytorchDatasetConfig
 from ...data.pytorch_dataset import PytorchDataset
@@ -299,7 +300,11 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         # We always want to log the raw loss.
         log_kwargs = {"batch_size": self.optimization_config.batch_size, "sync_dist": True}
         self.log(f"{split}_loss", results["loss"], **log_kwargs)
-
+        if split==Split.TRAIN: 
+            self.logger.experiment.log({
+                f"{split}_predicted_rate": wandb.Histogram(np.array(results["predicted_rate"].tolist())),
+                f"{split}_unnormalized_rate": wandb.Histogram(np.array(results["unnormalized_rate"].tolist())),
+            })
         return 
 
         if self.metrics_config.do_log_only_loss(split):
@@ -503,6 +508,7 @@ class PretrainConfig:
             "default_root_dir": "${save_dir}/model_checkpoints",
             "log_every_n_steps": 10,
             "strategy": None,
+            "gradient_clip_val": None, 
         }
     )
 
@@ -640,7 +646,7 @@ def train(cfg: PretrainConfig):
         if os.environ.get("LOCAL_RANK", "0") == "0":
             if do_log_graph:
                 # Watching the model naturally tracks parameter values and gradients.
-                wandb_logger.watch(LM, log="all", log_graph=True)
+                wandb_logger.watch(LM, log="all", log_graph=True, log_freq=10)
 
             if cfg.wandb_experiment_config_kwargs:
                 wandb_logger.experiment.config.update(cfg.wandb_experiment_config_kwargs)

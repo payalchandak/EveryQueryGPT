@@ -2,7 +2,7 @@ defaults:
   - pretrain_config
   - _self_
 
-do_overwrite: false
+do_overwrite: False
 seed: 1
 config:
   do_use_learnable_sinusoidal_ATE: false
@@ -27,7 +27,7 @@ config:
   resid_dropout: 0.1
   intermediate_size: 256
 optimization_config:
-  init_lr: 1e-3
+  init_lr: 1e-5
   end_lr_frac_of_init_lr: 0.1
   end_lr: null
   max_epochs: 100
@@ -52,15 +52,16 @@ data_config:
 trainer_config:
   accelerator: auto
   devices: auto
-  detect_anomaly: false
+  detect_anomaly: True
   log_every_n_steps: 50
   strategy: ddp_find_unused_parameters_true
+  gradient_clip_val: 0.5
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
   name: everyquery
   entity: payal-collabs
   project: EveryQueryGPT
   team: null
-  log_model: true
-  do_log_graph: true
-do_final_validation_on_metrics: true
+  log_model: True
+  do_log_graph: True
+do_final_validation_on_metrics: True
