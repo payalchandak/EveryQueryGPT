@@ -51,8 +51,8 @@ data_config:
   do_include_start_time_min: false
 trainer_config:
   accelerator: auto
-  devices: auto
-  detect_anomaly: True
+  devices: 1 # auto
+  detect_anomaly: False
   log_every_n_steps: 50
   strategy: ddp_find_unused_parameters_true
   gradient_clip_val: 0.5
