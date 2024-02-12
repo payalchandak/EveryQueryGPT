@@ -42,20 +42,6 @@ from ..utils import expand_indexed_regression, str_summary
 
 import wandb, numpy as np 
 
-# class MonitorOutputCallback(L.Callback): 
-
-#     def __init__(self, prefix='output'): 
-#         self.prefix = prefix+'/'
-
-#     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-#         print(outputs) 
-#         # if (batch_idx + 1) % trainer.log_every_n_steps == 0:
-#         trainer.logger.experiment.log({
-#             self.prefix+"predicted_rate": wandb.Histogram(np.array(outputs["predicted_rate"].tolist())),
-#             self.prefix+"unnormalized_rate": wandb.Histogram(np.array(outputs["unnormalized_rate"].tolist())),
-#         })
-
-
 class MonitorInputCallback(L.Callback): 
 
     def __init__(self, prefix='input', log_context=False, log_query=True): 
@@ -75,56 +61,46 @@ class MonitorInputCallback(L.Callback):
         log_dict[self.prefix+"answer"] = wandb.Histogram(np.array(answer.tolist())),
         trainer.logger.experiment.log(log_dict)
 
-class NaNPreventionCallback(L.Callback):
-    def __init__(self, action='log', print_batch_on_nan=True, checkpoint_on_nan=True):
-        assert action in {'log', 'zero', 'error'}, "Determines action on NaN detection"
+class AnomalyDetectionCallback(L.Callback):
+    def __init__(self, action='log', print_batch_on_anomaly=True, checkpoint_on_anomaly=True):
+        assert action in {'log', 'zero', 'error'}, "Determines what to do when NaN or Inf detected"
         self.action = action
-        self.checkpoint_on_nan = checkpoint_on_nan
-        self.print_batch_on_nan = print_batch_on_nan
-        self.nan_detected = False
+        self.checkpoint_on_anomaly = checkpoint_on_anomaly
+        self.print_batch_on_anomaly = print_batch_on_anomaly
+        self.anomaly_detected = False
         self.current_batch = None
         self.current_batch_idx = None  
 
     def on_train_batch_start(self, trainer, pl_module, batch, batch_idx): 
         self.current_batch = batch
         self.current_batch_idx = batch_idx
-        # Check for NaNs in model parameters before training_step
-        self.nan_detected = self._check_for_nans(pl_module, check_grads=False, trainer=trainer)
-        if self.print_batch_on_nan and self.nan_detected: self._print_current_batch()
+        self.anomaly_detected = self._check_for_anomaly(pl_module, check_grads=False, trainer=trainer)
+        if self.print_batch_on_anomaly and self.anomaly_detected: self._print_current_batch()
 
     def on_after_backward(self, trainer, pl_module):
-        # Check for NaNs in gradients after backward
-        self.nan_detected = self._check_for_nans(pl_module, check_grads=True, trainer=trainer)
-        if self.print_batch_on_nan and self.nan_detected: self._print_current_batch()
+        self.anomaly_detected = self._check_for_anomaly(pl_module, check_grads=True, trainer=trainer)
+        if self.print_batch_on_anomaly and self.anomaly_detected: self._print_current_batch()
 
     def on_before_optimizer_step(self, trainer, pl_module, optimizer):
-        # If NaNs were detected, optionally checkpoint the model before the optimizer step
-        if self.nan_detected and self.checkpoint_on_nan:
+        if self.anomaly_detected and self.checkpoint_on_anomaly:
             self._checkpoint_model(trainer, pl_module)
-        if self.nan_detected and self.action == 'zero':
+        if self.anomaly_detected and self.action == 'zero':
             optimizer.zero_grad()
             print("NaN detected, skipping optimizer step.") 
-        self.nan_detected = False
+        self.anomaly_detected = False
 
-    def _check_for_nans(self, pl_module, check_grads, trainer):
-        nan_detected = False 
+    def _check_for_anomaly(self, pl_module, check_grads, trainer):
+        anomaly = False 
         for name, param in pl_module.named_parameters():
             target = param.grad if check_grads else param
-            if target is not None and torch.isnan(target).any():
-                nan_detected = True
-                message = f"NaN detected in {'gradients' if check_grads else 'parameters'} of {name}."
-                print(message)
-                # if self.action == 'log':
-                #     pass
-                # elif self.action == 'zero':
-                #     if check_grads:
-                #         param.grad = torch.where(torch.isnan(param.grad), torch.zeros_like(param.grad), param.grad)
-                #         print(f"NaN handled by zeroing 'gradients' of {name}.")
-                #     else:
-                #         param.data = torch.where(torch.isnan(param.data), torch.zeros_like(param.data), param.data)
-                # elif self.action == 'error':
-                #     raise ValueError(message)
-        return nan_detected
+            if target is not None: 
+                if torch.isnan(target).any():
+                    anomaly = True
+                    print( f"NaN detected in {'gradients' if check_grads else 'parameters'} of {name}." )
+                elif torch.isinf(target).any():
+                    anomaly = True
+                    print( f"Inf detected in {'gradients' if check_grads else 'parameters'} of {name}." )
+        return anomaly
 
     def _print_current_batch(self): 
         context, query, answer = self.current_batch
@@ -397,7 +373,9 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
 
         # We always want to log the raw loss.
         log_kwargs = {"batch_size": self.optimization_config.batch_size, "sync_dist": True}
-        self.log(f"{split}_loss", results["loss"], **log_kwargs)
+        self.log(f"{split}/loss", results["loss"], **log_kwargs)
+        self.log(f"{split}/manual_loss", results["manual_loss"], **log_kwargs)
+        self.log(f"{split}/dloss_drate", results["dloss_drate"], **log_kwargs)
         if split==Split.TRAIN: 
             self.logger.experiment.log({
                 f"output/predicted_rate": wandb.Histogram(np.array(results["predicted_rate"].tolist())),
@@ -607,6 +585,7 @@ class PretrainConfig:
             "log_every_n_steps": 10,
             "strategy": None,
             "gradient_clip_val": None, 
+            "gradient_clip_algorithm": None,
         }
     )
 
@@ -721,11 +700,11 @@ def train(cfg: PretrainConfig):
     callbacks = [
         LearningRateMonitor(logging_interval="step"),
         MonitorInputCallback(),
-        NaNPreventionCallback(action='zero', print_batch_on_nan=True, checkpoint_on_nan=False),
+        AnomalyDetectionCallback(action='zero', print_batch_on_anomaly=True, checkpoint_on_anomaly=False),
     ]
     if optimization_config.patience is not None:
         callbacks.append(
-            EarlyStopping(monitor="tuning_loss", mode="min", patience=optimization_config.patience)
+            EarlyStopping(monitor="tuning/loss", mode="min", patience=optimization_config.patience)
         )
 
     trainer_kwargs = dict(
@@ -790,6 +769,6 @@ def train(cfg: PretrainConfig):
             with open(cfg.save_dir / "held_out_metrics.json", mode="w") as f:
                 json.dump(held_out_metrics, f)
 
-        return tuning_metrics[0]["tuning_loss"], tuning_metrics, held_out_metrics
+        return tuning_metrics[0]["tuning/loss"], tuning_metrics, held_out_metrics
 
     return None

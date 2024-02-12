@@ -51,17 +51,18 @@ data_config:
   do_include_start_time_min: false
 trainer_config:
   accelerator: auto
-  devices: 1 # auto
+  devices: 1 #auto
   detect_anomaly: False
-  log_every_n_steps: 50
+  log_every_n_steps: 10
   strategy: ddp_find_unused_parameters_true
-  gradient_clip_val: 0.5
+  # gradient_clip_val: 10
+  # gradient_clip_algorithm: 'value'
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
   name: everyquery
   entity: payal-collabs
   project: EveryQueryGPT
   team: null
-  log_model: True
-  do_log_graph: True
+  log_model: False
+  do_log_graph: False
 do_final_validation_on_metrics: True
