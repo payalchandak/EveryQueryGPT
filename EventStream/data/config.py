@@ -891,6 +891,9 @@ class PytorchDatasetConfig(JSONableMixin):
     # Trades off between speed/disk/mem and support
     cache_for_epochs: int = 1
 
+    static_query_mode: bool = False
+    static_query_name: str | None = None 
+
     def __post_init__(self):
         if self.cache_for_epochs is None:
             self.cache_for_epochs = 1
@@ -1056,8 +1059,8 @@ class PytorchDatasetConfig(JSONableMixin):
 
         return all_files
     
-    def sample_code(self)->tuple[str, int, bool]: 
-
+    @property
+    def _all_query_codes(self) -> list:
         from EventStream.data.dataset_polars import Dataset # (todo) circular import dependency if you move it out  
         codes = []
         vocab = Dataset.load(self.save_dir).unified_vocabulary_idxmap
@@ -1076,10 +1079,19 @@ class PytorchDatasetConfig(JSONableMixin):
                     vocab_obs_freq = cfg.vocabulary.obs_frequencies[cfg.vocabulary[code_name]]
                 obs_freq = ofoc * ofpc * vocab_obs_freq
                 codes.append( (code_name, code_idx, has_value, obs_freq) )
-        buckets = [*zip( np.concatenate([[0],np.logspace(-5, -1, 5)]), np.logspace(-5, 0, 6))]
-        obs_freq_start, obs_freq_end = random.choice(buckets)
-        codes_in_bucket = [code for code in codes if (code[-1] >= obs_freq_start) and (code[-1] <= obs_freq_end)]
-        code_name, code_idx, has_value, obs_freq = random.choice(codes_in_bucket)
+        return codes 
+
+    def sample_code(self)->tuple[str, int, bool]: 
+
+        if self.static_query_mode: 
+            code = [code for code in self._all_query_codes if code[0]==self.static_query_name]
+            code_name, code_idx, has_value, obs_freq = code[0]
+        else:
+            buckets = [*zip( np.concatenate([[0],np.logspace(-5, -1, 5)]), np.logspace(-5, 0, 6))]
+            obs_freq_start, obs_freq_end = random.choice(buckets)
+            codes_in_bucket = [code for code in self._all_query_codes if (code[-1] >= obs_freq_start) and (code[-1] <= obs_freq_end)]
+            code_name, code_idx, has_value, obs_freq = random.choice(codes_in_bucket)
+
         return code_name, code_idx, has_value
 
 
