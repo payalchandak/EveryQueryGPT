@@ -39,14 +39,8 @@ class EveryQueryOutputLayer(torch.nn.Module):
         answer: torch.FloatTensor,
     ) -> torch.FloatTensor:
         
-        # encoded_context dims are (batch_size, sequence length?? (not sure), hidden_size) 
-        # encoded_query dims are (batch_size, hidden_size)
-        encoded_context = encoded_context.sum(dim=1).squeeze(dim=1)
-        # mean is better, respect the event mask 
-        # [to pool via max: https://github.com/payalchandak/EveryQueryGPT/blob/dev/EventStream/transformer/utils.py#L61]
-        # or maybe this: https://github.com/payalchandak/EveryQueryGPT/blob/dev/EventStream/transformer/utils.py#L209
-        assert encoded_context.shape == encoded_query.shape
-
+        assert encoded_context.shape == encoded_query.shape, f"encoded_context {encoded_context.shape} and encoded_query {encoded_query.shape} should be (batch_size, hidden_size)"
+        
         embed = self.proj(torch.cat([encoded_context, encoded_query], dim=1)) 
         
         # torch.nn.functional.elu has Image (-1, 1), but we need our rate parameter to be > 0. So we need to
@@ -114,24 +108,19 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
         # self.query_embedding_layer = self.context_encoder.input_layer.data_embedding_layer.query_embedding
         self.query_encoder = None # MLP ?? 
         self.output_layer = EveryQueryOutputLayer(config)
+    
+    def safe_max_seq_dim(self, X: torch.Tensor, mask: torch.BoolTensor):
+        # X is batch_size, seq_len, hidden_dim
+        mask = mask.unsqueeze(-1).expand_as(X) 
+        masked_X = torch.where(mask, X, -float("inf"))
+        maxes = masked_X.max(1)[0]
+        return torch.nan_to_num(maxes, nan=None, posinf=None, neginf=0)
 
     def forward(self, batch: PytorchBatch, **kwargs) -> torch.FloatTensor: 
-
-        # use_cache = kwargs.get("use_cache", False) # question – what is the cache for? dont worry, used for inference in ARM
-        # output_attentions = kwargs.get("output_attentions", False)
-        # output_hidden_states = kwargs.get("output_hidden_states", False)
-
         context, query, answer = batch
         encoded_context = self.context_encoder(context, **kwargs)
+        encoded_context = self.safe_max_seq_dim(encoded_context.last_hidden_state, context.event_mask)
         query_embed = self.query_embedding_layer(query, **kwargs) 
-        encoded_query = query_embed # self.query_encoder(query_embed, **kwargs)
-        output = self.output_layer(encoded_context.last_hidden_state, encoded_query, answer)
-
-        # if use_cache:
-        #     output["past_key_values"] = encoded_context.past_key_values
-        # if output_attentions:
-        #     output["attentions"] = encoded_context.attentions
-        # if output_hidden_states:
-        #     output["hidden_states"] = encoded_context.hidden_states
-
+        encoded_query = query_embed # (todo) self.query_encoder(query_embed, **kwargs)
+        output = self.output_layer(encoded_context, encoded_query, answer)
         return output
