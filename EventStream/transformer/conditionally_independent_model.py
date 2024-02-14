@@ -29,6 +29,7 @@ class EveryQueryOutputLayer(torch.nn.Module):
     ):
         super().__init__()
         self.proj = torch.nn.Linear(config.hidden_size * 2, 1) 
+        self.objective = torch.nn.PoissonNLLLoss(log_input=True)
         # (todo) update config to include separate query_hidden_size 
 
     def forward(
@@ -40,23 +41,23 @@ class EveryQueryOutputLayer(torch.nn.Module):
         
         assert encoded_context.shape == encoded_query.shape, f"encoded_context {encoded_context.shape} and encoded_query {encoded_query.shape} should be (batch_size, hidden_size)"
         
-        embed = self.proj(torch.cat([encoded_context, encoded_query], dim=1)) 
-        
+        log_rate = self.proj(torch.cat([encoded_context, encoded_query], dim=1)) 
+        loss = self.objective(log_rate, answer)
+
         # torch.nn.functional.elu has Image (-1, 1), but we need our rate parameter to be > 0. So we need to
         # add 1 to the output here. To ensure validity given numerical imprecision, we also add a buffer given
         # by the smallest possible positive value permissible given the type of `embed`.
-        rate = torch.nn.functional.elu(embed) + 1 + torch.finfo(embed.dtype).tiny
+        rate = torch.nn.functional.elu(log_rate) + 1 + torch.finfo(log_rate.dtype).tiny
         rate = rate.squeeze(dim=-1) # Squeeze from (batch_size, 1) to (batch_size)
         
-        loss = - torch.distributions.Poisson(rate).log_prob(answer).mean()
         manual_loss = torch.mean( rate - (answer * torch.log(rate)) )
         dloss_drate = torch.mean( 1 - ( answer / rate ) )
         
         out = {
-            'loss':loss, 
             'manual_loss':manual_loss, 
-            'predicted_rate':rate.squeeze(),
-            'unnormalized_rate':embed.squeeze(),
+            'loss':loss, 
+            'rate':rate.squeeze(),
+            'log_rate':log_rate.squeeze(),
             'dloss_drate': dloss_drate.squeeze(),
             'answer': answer.squeeze(),
         }

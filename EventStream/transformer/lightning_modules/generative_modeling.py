@@ -312,11 +312,11 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         self.log(f"{split}/dloss_drate", results["dloss_drate"], **log_kwargs)
 
         for metric_name, metric in self.rate_regression_metrics.items():
-            self.log(f"{split}/{metric_name}", metric(results["predicted_rate"], results["answer"].float()), **log_kwargs)
+            self.log(f"{split}/{metric_name}", metric(results["rate"], results["answer"].float()), **log_kwargs)
 
         self.logger.experiment.log({
-            f"output/{split}/predicted_rate": wandb.Histogram(np.array(results["predicted_rate"].tolist())),
-            f"output/{split}/unnormalized_rate": wandb.Histogram(np.array(results["unnormalized_rate"].tolist())),
+            f"{split}/rate": wandb.Histogram(np.array(results["rate"].tolist())),
+            f"{split}/log_rate": wandb.Histogram(np.array(results["log_rate"].tolist())),
         })
         
         return 
@@ -665,7 +665,7 @@ def train(cfg: PretrainConfig):
         if os.environ.get("LOCAL_RANK", "0") == "0":
             if do_log_graph:
                 # Watching the model naturally tracks parameter values and gradients.
-                wandb_logger.watch(LM, log="all", log_graph=True, log_freq=10)
+                wandb_logger.watch(LM, log="all", log_graph=True, log_freq=50)
 
             if cfg.wandb_experiment_config_kwargs:
                 wandb_logger.experiment.config.update(cfg.wandb_experiment_config_kwargs)
