@@ -58,6 +58,7 @@ class EveryQueryOutputLayer(torch.nn.Module):
             'predicted_rate':rate.squeeze(),
             'unnormalized_rate':embed.squeeze(),
             'dloss_drate': dloss_drate.squeeze(),
+            'answer': answer.squeeze(),
         }
         return out 
         
