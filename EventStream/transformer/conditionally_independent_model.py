@@ -29,8 +29,7 @@ class EveryQueryOutputLayer(torch.nn.Module):
     ):
         super().__init__()
         self.proj = torch.nn.Linear(config.hidden_size * 2, 1) 
-        # self.proj = torch.nn.Linear(config.hidden_size*2 + config.query_hidden_size, 1) 
-        # (todo) update config to include query_hidden_size 
+        # (todo) update config to include separate query_hidden_size 
 
     def forward(
         self,
