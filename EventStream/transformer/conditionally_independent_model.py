@@ -43,13 +43,7 @@ class EveryQueryOutputLayer(torch.nn.Module):
         
         log_rate = self.proj(torch.cat([encoded_context, encoded_query], dim=1)) 
         loss = self.objective(log_rate, answer)
-
-        # torch.nn.functional.elu has Image (-1, 1), but we need our rate parameter to be > 0. So we need to
-        # add 1 to the output here. To ensure validity given numerical imprecision, we also add a buffer given
-        # by the smallest possible positive value permissible given the type of `embed`.
-        rate = torch.nn.functional.elu(log_rate) + 1 + torch.finfo(log_rate.dtype).tiny
-        rate = rate.squeeze(dim=-1) # Squeeze from (batch_size, 1) to (batch_size)
-        
+        rate = torch.exp(log_rate)
         manual_loss = torch.mean( rate - (answer * torch.log(rate)) )
         dloss_drate = torch.mean( 1 - ( answer / rate ) )
         
