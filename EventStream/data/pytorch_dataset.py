@@ -571,28 +571,19 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         query_end_idx = np.min(np.argwhere((times+start_time) >= query_end_time))
         normalized_query_start_offset = (query_start_offset - min_query_start_offset) / (max_query_start_offset - min_query_start_offset)
     
-
-        # code and range
-        code_name, code_idx, code_has_value =  self.config.sample_code() 
-
-        if code_has_value: 
-            # range sampled as a random interval from the support of the normal distribution sampled according to its density
-            range_min, range_max = sorted([scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1), 
-                                           scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1)])
-        else: 
-            range_min, range_max = 0, 0 
-
+        code = self.config.sample_code() 
+        
         # calculate answer 
         answer = 0
         query_dynamic_indices = full_subj_data['dynamic_indices'][query_start_idx:query_end_idx+1]
         query_dynamic_values = full_subj_data['dynamic_values'][query_start_idx:query_end_idx+1]
         for i in range(len(query_dynamic_indices)): 
             for j in range(len(query_dynamic_indices[i])): 
-                if query_dynamic_indices[i][j] == code_idx:
-                    if code_has_value: 
+                if query_dynamic_indices[i][j] == code['idx']:
+                    if code['has_value']: 
                         x = query_dynamic_values[i][j]
                         if x is None: continue # todo: check sometimes None –– outlier detector?  
-                        if (x>=range_min) and (x<=range_max): 
+                        if (x>=code['range_min']) and (x<=code['range_max']): 
                             answer += 1
                     else: 
                         answer += 1
@@ -608,11 +599,12 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         query = {
             'start_offset': normalized_query_start_offset,
             'duration': normalized_query_duration,
-            'code_name': code_name,
-            'code_idx': code_idx,
-            'code_has_value': code_has_value,
-            'range_min': range_min, 
-            'range_max': range_max, 
+            'code_name': code['name'],
+            'code_idx': code['idx'],
+            'code_has_value': code['has_value'],
+            'code_type': code['type'],
+            'range_min': code['range_min'], 
+            'range_max': code['range_max'], 
         } 
         return full_subj_data, query, answer
 

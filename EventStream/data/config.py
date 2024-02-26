@@ -17,6 +17,7 @@ from typing import Any, Union
 import omegaconf
 import pandas as pd
 import numpy as np
+import scipy.stats
 from loguru import logger
 
 from ..utils import (
@@ -893,6 +894,7 @@ class PytorchDatasetConfig(JSONableMixin):
 
     static_query_mode: bool = False
     static_query_name: str | None = None 
+    static_query_range: tuple[float, float] = (.0, .0) # unnormalized range
 
     def __post_init__(self):
         if self.cache_for_epochs is None:
@@ -1064,13 +1066,13 @@ class PytorchDatasetConfig(JSONableMixin):
         from EventStream.data.dataset_polars import Dataset # (todo) circular import dependency if you move it out  
         codes = []
         vocab = Dataset.load(self.save_dir).unified_vocabulary_idxmap
-        for key, cfg in self.measurement_configs.items(): 
+        for code_type, cfg in self.measurement_configs.items(): 
             if (cfg.temporality == 'static') or (cfg.temporality == 'functional_time_dependent'): 
                 continue 
             has_value = 'regression' in cfg.modality
             ofoc = cfg.observation_rate_over_cases
             ofpc = cfg.observation_rate_per_case
-            for code_name, code_idx in vocab[key].items(): 
+            for code_name, code_idx in vocab[code_type].items(): 
                 if code_name=="UNK": continue 
                 if '__EQ_' in code_name: has_value = False
                 if cfg.vocabulary is None: 
@@ -1078,21 +1080,54 @@ class PytorchDatasetConfig(JSONableMixin):
                 else:
                     vocab_obs_freq = cfg.vocabulary.obs_frequencies[cfg.vocabulary[code_name]]
                 obs_freq = ofoc * ofpc * vocab_obs_freq
-                codes.append( (code_name, code_idx, has_value, obs_freq) )
+                if has_value: 
+                    assert cfg.measurement_metadata is not None 
+                    normalizer = cfg.measurement_metadata.normalizer
+                    if isinstance(normalizer, pd.Series): 
+                        mean = normalizer[code_name]['mean_']
+                        std = normalizer[code_name]['std_']
+                    else:
+                        mean = normalizer['mean_']
+                        std = normalizer['std_']
+                else: 
+                    mean, std = None, None 
+                code_info = {
+                    'name': code_name, 
+                    'idx': code_idx, 
+                    'has_value': has_value, 
+                    'type': code_type, 
+                    'obs_freq': obs_freq,
+                    'normalizer_mean': mean, 
+                    'normalizer_std': std, 
+                }
+                codes.append( code_info )
         return codes 
 
     def sample_code(self)->tuple[str, int, bool]: 
 
         if self.static_query_mode: 
-            code = [code for code in self._all_query_codes if code[0]==self.static_query_name]
-            code_name, code_idx, has_value, obs_freq = code[0]
+            code = [code for code in self._all_query_codes if code['name']==self.static_query_name][0]
         else:
             buckets = [*zip( np.concatenate([[0],np.logspace(-5, -1, 5)]), np.logspace(-5, 0, 6))]
             obs_freq_start, obs_freq_end = random.choice(buckets)
-            codes_in_bucket = [code for code in self._all_query_codes if (code[-1] >= obs_freq_start) and (code[-1] <= obs_freq_end)]
-            code_name, code_idx, has_value, obs_freq = random.choice(codes_in_bucket)
+            codes_in_bucket = [code for code in self._all_query_codes if (code['obs_freq'] >= obs_freq_start) and (code['obs_freq'] <= obs_freq_end)]
+            code = random.choice(codes_in_bucket)
 
-        return code_name, code_idx, has_value
+        if code['has_value']:
+            if self.static_query_mode: 
+                if self.static_query_range == (.0, .0): 
+                    code['range_min'], code['range_max'] = (.0, .0)
+                else: 
+                    code['range_min'] = (self.static_query_range[0] - code['normalizer_mean']) / code['normalizer_std']
+                    code['range_max'] = (self.statc_query_range[1] - code['normalizer_mean']) / code['normalizer_std']
+            else: 
+                # range is a random interval from the support of the normal distribution sampled according to its density 
+                code['range_min'], code['range_max'] = sorted([scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1), 
+                                                               scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1)])
+        else: 
+            code['range_min'], code['range_max'] = (.0, .0)
+
+        return code
 
 
 @dataclasses.dataclass
