@@ -50,10 +50,11 @@ data_config:
   do_include_subject_id: False
   do_include_start_time_min: False
   static_query_mode: False 
-  static_query_name: None
+  static_query_name: None 
+  static_query_range: (.0, .0)
 trainer_config:
   accelerator: auto
-  devices: 1 #auto
+  devices: auto
   detect_anomaly: False
   log_every_n_steps: 10
   strategy: ddp_find_unused_parameters_true

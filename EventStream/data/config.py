@@ -1119,7 +1119,7 @@ class PytorchDatasetConfig(JSONableMixin):
                     code['range_min'], code['range_max'] = (.0, .0)
                 else: 
                     code['range_min'] = (self.static_query_range[0] - code['normalizer_mean']) / code['normalizer_std']
-                    code['range_max'] = (self.statc_query_range[1] - code['normalizer_mean']) / code['normalizer_std']
+                    code['range_max'] = (self.static_query_range[1] - code['normalizer_mean']) / code['normalizer_std']
             else: 
                 # range is a random interval from the support of the normal distribution sampled according to its density 
                 code['range_min'], code['range_max'] = sorted([scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1), 
