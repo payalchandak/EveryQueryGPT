@@ -894,6 +894,7 @@ class PytorchDatasetConfig(JSONableMixin):
 
     static_query_mode: bool = False
     static_query_name: str | None = None 
+    static_query_code: str | None = None 
     static_query_range: tuple[float, float] = (.0, .0) # unnormalized range
 
     def __post_init__(self):
@@ -1106,7 +1107,7 @@ class PytorchDatasetConfig(JSONableMixin):
     def sample_code(self)->tuple[str, int, bool]: 
 
         if self.static_query_mode: 
-            code = [code for code in self._all_query_codes if code['name']==self.static_query_name][0]
+            code = [code for code in self._all_query_codes if code['name']==self.static_query_code][0]
         else:
             buckets = [*zip( np.concatenate([[0],np.logspace(-5, -1, 5)]), np.logspace(-5, 0, 6))]
             obs_freq_start, obs_freq_end = random.choice(buckets)

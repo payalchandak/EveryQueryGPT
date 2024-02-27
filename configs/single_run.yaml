@@ -51,7 +51,8 @@ data_config:
   do_include_start_time_min: False
   static_query_mode: False 
   static_query_name: None 
-  static_query_range: (.0, .0)
+  static_query_code: None 
+  static_query_range: [0,0]
 trainer_config:
   accelerator: auto
   devices: auto

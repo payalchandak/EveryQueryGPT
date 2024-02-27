@@ -1,38 +1,19 @@
-import os
-from cycler import V
-import rootutils
-import sys
-root = rootutils.setup_root(os.path.abspath(""), dotenv=True, pythonpath=True, cwd=False)
-sys.path.append(os.environ["EVENT_STREAM_PATH"])
-import os
-import numpy as np
-import torch
-from collections import defaultdict
-from datetime import datetime, timedelta
-from humanize import naturalsize, naturaldelta
-from pathlib import Path
-from sparklines import sparklines
-from torch.utils.data import DataLoader, Dataset
-from tqdm.auto import tqdm
-from typing import Callable
-import random
+# import os, rootutils, sys
+# root = rootutils.setup_root(os.path.abspath(""), dotenv=True, pythonpath=True, cwd=False)
+# sys.path.append(os.environ["EVENT_STREAM_PATH"])
+# from pathlib import Path
+# from EventStream.data.config import PytorchDatasetConfig
 
-from EventStream.data.dataset_polars import Dataset
-from EventStream.data.config import PytorchDatasetConfig
-from EventStream.data.types import PytorchBatch
-from EventStream.data.pytorch_dataset import PytorchDataset
-from EventStream.tasks.profile import add_tasks_from
+# COHORT_NAME = "ESD_09-01-23-1"
+# TASK_NAME = "readmission_30d_all"
+# PROJECT_DIR = Path(os.environ["PROJECT_DIR"])
+# dataset_dir = f"/storage/shared/mgh-hf-dataset/processed/{COHORT_NAME}" # PROJECT_DIR / "data" / COHORT_NAME
 
-COHORT_NAME = "ESD_09-01-23-1"
-TASK_NAME = "readmission_30d_all"
-PROJECT_DIR = Path(os.environ["PROJECT_DIR"])
-dataset_dir = f"/storage/shared/mgh-hf-dataset/processed/{COHORT_NAME}" # PROJECT_DIR / "data" / COHORT_NAME
-
-queries = [
+EVAL_QUERIES = [
     {
         'name': 'High NT-proBNP',
         'code':'N-terminal pro-brain natriuretic peptide',
-        'range':(125, 100000),
+        'range':(125, 10000),
     },
     {
         'name': 'High Trop-T',
@@ -140,6 +121,16 @@ queries = [
         'range':(.0,.0),
     },
     {
+        'name': 'Aortic dissection',
+        'code':'Dissection of unspecified site of aorta',
+        'range':(.0,.0),
+    },
+    {
+        'name': 'Cardiac tamponade',
+        'code':'Cardiac tamponade',
+        'range':(.0,.0),
+    },
+    {
         'name': 'Atrial fibrillation',
         'code':'Atrial fibrillation',
         'range':(.0,.0),
@@ -170,38 +161,46 @@ queries = [
         'range':(.0,.0),
     },
     {
-        'name':'Got ECG',
-        'code':'Electrocardiogram, routine ECG with at least 12 leads; with interpretation and report',
-        'range':(.0,.0),
+        'name': 'High Systolic BP',
+        'code':'Systolic-Epic',
+        'range':(120.,250.),
     },
     {
-        'name':'Got TTE',
-        'code':'TTE',
-        'range':(.0,.0),
+        'name': 'Tachycardic Pulse',
+        'code':'Pulse',
+        'range':(100.,250.),
     },
     {
-        'name':'Got TEE',
-        'code':'TEE',
-        'range':(.0,.0),
+        'name': 'Bradycardic Pulse',
+        'code':'Pulse',
+        'range':(0.,60.),
     },
-    {
-        'name':'Got pacemaker interrogation',
-        'code':'Pacemaker interrogation-Oncall',
-        'range':(.0,.0),
-    },
-
 ]
 
-for q in queries: 
-    pyd_config = PytorchDatasetConfig(
-    save_dir=dataset_dir,
-    max_seq_len=256,
-    train_subset_size=0.001,
-    train_subset_seed=79163,
-    do_include_start_time_min=True,
-    static_query_mode=True,
-    static_query_name=q['code'],
-    static_query_range=q['range'],
-)
-    code = pyd_config.sample_code()
-    print(f" {q['name']} {code['obs_freq']:.0e}")
+
+# for q in EVAL_QUERIES: 
+#     pyd_config = PytorchDatasetConfig(
+#     save_dir=dataset_dir,
+#     max_seq_len=256,
+#     train_subset_size=0.001,
+#     train_subset_seed=79163,
+#     do_include_start_time_min=True,
+#     static_query_mode=True,
+#     static_query_name=q['name'],
+#     static_query_code=q['code'],
+#     static_query_range=q['range'],
+# )
+#     code = pyd_config.sample_code()
+#     if code['has_value']:
+#         print(f"{q['name']} with range {q['range']}")
+#     else: 
+#         print(f"{q['name']}")
+#     print(f"observation freq ~ {code['obs_freq']:.0e}\n")
+
+
+'''
+relative to the this patients last number, will this change? 
+    - trends? a lot patients are consistently outside the normal
+    - some pt s have baseline elevated BNP... 
+
+'''

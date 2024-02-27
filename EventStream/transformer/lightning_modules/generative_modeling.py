@@ -25,6 +25,7 @@ from transformers import get_polynomial_decay_schedule_with_warmup
 from ...data.config import PytorchDatasetConfig
 from ...data.pytorch_dataset import PytorchDataset
 from ...data.types import DataModality, PytorchBatch
+from ...data.eval_queries import EVAL_QUERIES
 from ...utils import hydra_dataclass, task_wrapper
 from ..conditionally_independent_model import CIPPTForGenerativeSequenceModeling
 from ..config import (
@@ -88,6 +89,7 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         self.config = config
         self.optimization_config = optimization_config
         self.metrics_config = metrics_config
+        self.static_query_prefix = ""
 
         self.save_hyperparameters(
             {
@@ -97,19 +99,7 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         )
         self.build_metrics()
 
-        # match config.structured_event_processing_mode:
-        #     case StructuredEventProcessingMode.NESTED_ATTENTION:
-        #         model_cls = NAPPTForGenerativeSequenceModeling
-        #     case StructuredEventProcessingMode.CONDITIONALLY_INDEPENDENT:
-        #         model_cls = CIPPTForGenerativeSequenceModeling
-        #     case _:
-        #         raise ValueError(
-        #             f"Unsupported structured event processing mode: {config.structured_event_processing_mode}"
-        #         )
         model_cls = CIPPTForGenerativeSequenceModeling
-            
-        # initializing model here, should always be CIPPTForGenerativeSequenceModeling
-            
         if pretrained_weights_fp is None:
             self.model = model_cls(config)
         else:
@@ -248,55 +238,6 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                                 **metric_cls_kwargs, **averaging_kwargs
                             )
 
-    def _log_metric_dict(
-        self,
-        preds: torch.Tensor,
-        labels: torch.Tensor,
-        metrics: dict[str, torchmetrics.Metric],
-        split: Split,
-        measurement: str,
-        cat: MetricCategories,
-    ):
-        """This helper function logs the set of named metrics for the predictions `preds` and labels `labels`.
-
-        Args:
-            `preds` (`torch.Tensor`): The predictions for this metric calculation.
-            `labels` (`torch.Tensor`): The labels for this metric calculation.
-            `metrics` (`Dict[str, torchmetrics.Metric]`): The metrics to log, by name.
-            `skip_metrics` (`Sequence[str]`):
-                A list of metrics to skip. Entries are not full metric names, but rather are partial names and
-                any metric whose name contains an element of `skip_metrics` will be skipped.
-                For example, if `skip_metrics = ['AUROC', 'AUPRC']`, then a metric with name `'macro_AUROC'`
-                or `'micro_AUPRC'` would be skipped, whereas a metric named `'weighted_accuracy'` would not.
-            `split` (`str`): TODO
-            `measurement` (`str`): The measurement of this metric calculation. Affects the log name.
-        """
-        for metric_name, metric in metrics.items():
-            # We'll want to skip a metric if any element of our skip_metrics list is a substring of the metric
-            # name:
-            if not self.metrics_config.do_log(split, cat, metric_name):
-                continue
-
-            try:
-                if split != Split.TRAIN:
-                    # This is slightly more efficient if we only care about epoch-level outputs.
-                    # Source: https://torchmetrics.readthedocs.io/en/stable/pages/lightning.html
-                    metric.update(preds, labels)
-                else:
-                    metric(preds, labels)
-
-                self.log(
-                    f"{split}_{measurement}_{metric_name}",
-                    metric,
-                    batch_size=self.optimization_config.batch_size,
-                    sync_dist=True,
-                )
-            except (ValueError, IndexError) as e:
-                logger.error(
-                    f"Failed to compute {metric_name} for {measurement} "
-                    f"with preds ({str_summary(preds)}) and labels ({str_summary(labels)}): {e}."
-                )
-
     def log_metrics(self, results: dict, split: Split):
         """Logs metric results for a given output result.
 
@@ -307,6 +248,12 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         """
 
         log_kwargs = {"batch_size": self.optimization_config.batch_size, "sync_dist": True}
+
+        if self.static_query_prefix: 
+            for metric_name, metric in self.rate_regression_metrics.items():
+                self.log(f"{split}/{self.static_query_prefix} {metric_name}", metric(results["rate"], results["answer"].float()), **log_kwargs)
+            return 
+        
         self.log(f"{split}/loss", results["loss"], **log_kwargs)
         self.log(f"{split}/manual_loss", results["manual_loss"], **log_kwargs)
         self.log(f"{split}/dloss_drate", results["dloss_drate"], **log_kwargs)
@@ -320,116 +267,6 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         })
         
         return 
-
-        if self.metrics_config.do_log_only_loss(split):
-            return
-
-        # We start by logging the losses.
-        if self.metrics_config.do_log(split, MetricCategories.LOSS_PARTS):
-            self.log_dict(
-                {f"{split}_{k}_cls_NLL": v for k, v in results["losses"]["classification"].items()},
-                **log_kwargs,
-            )
-            self.log_dict(
-                {f"{split}_{k}_reg_NLL": v for k, v in results["losses"]["regression"].items()},
-                **log_kwargs,
-            )
-            self.log(f"{split}_TTE_reg_NLL", results["losses"]["time_to_event"], **log_kwargs)
-
-        # Per data type
-        for measurement, metrics_dict in self.metrics.items():
-            mask = results["event_mask"]
-
-            if not mask.any():
-                continue
-
-            for task_type, metrics in metrics_dict.items():
-                if task_type in self.CLASSIFICATION and self.metrics_config.do_log(
-                    split, MetricCategories.CLASSIFICATION
-                ):
-                    # For now, we ignore the is_observed distribution (the first element of the below tuple).
-                    _, sample_dist = results["preds"]["classification"][measurement]
-                    preds = sample_dist.logits
-                    labels = results["labels"]["classification"][measurement]
-
-                    # We need to filter these down to just those corresponding to observed events. Note that
-                    # unlike TTE, the assumption here is that preds and labels correspond to predictions for
-                    # and labels of the events at their indexed position; not for the subsequent event. So we
-                    # don't need to shift `results['event_mask']` here to account for that.
-
-                    preds = preds[mask]
-                    labels = labels[mask].long()
-
-                    self._log_metric_dict(
-                        preds=preds,
-                        labels=labels,
-                        metrics=metrics,
-                        measurement=measurement,
-                        split=split,
-                        cat=MetricCategories.CLASSIFICATION,
-                    )
-
-                elif task_type == DataModality.MULTIVARIATE_REGRESSION and self.metrics_config.do_log(
-                    split, MetricCategories.REGRESSION
-                ):
-                    vocab_size = self.config.vocab_sizes_by_measurement[measurement]
-
-                    # Here, like for TTE, we need to sample from the returned distribution before we can use
-                    # it directly. Here we also need to limit to just those events that are actually observed.
-                    # Like above, the assumption here is that preds and labels correspond to predictions for
-                    # and labels of the events at their indexed position; not for the subsequent event. So we
-                    # don't need to shift `results['event_mask']` here to account for that.
-                    _, dist = results["preds"]["regression"][measurement]
-                    preds = dist.sample()[mask]
-                    labels = results["labels"]["regression"][measurement][mask]
-
-                    # However, as our regression output is actually indexed only to the group keys that are
-                    # actually measured (tracked in `results['preds']['regression_indices']`, we need to
-                    # expand our predictions and labels to be in the full vocabulary space for the metrics to
-                    # work naturally.
-                    preds_indices = results["preds"]["regression_indices"][measurement][mask]
-                    labels_indices = results["labels"]["regression_indices"][measurement][mask]
-
-                    # We also need to reflect just those data elements for which values were observed:
-                    data_el_mask = results["dynamic_values_mask"][mask]
-
-                    preds = preds[data_el_mask]
-                    labels = labels[data_el_mask]
-                    preds_indices = preds_indices[data_el_mask]
-                    labels_indices = labels_indices[data_el_mask]
-
-                    preds_expanded = expand_indexed_regression(preds, preds_indices, vocab_size)
-                    labels_expanded = expand_indexed_regression(labels, labels_indices, vocab_size)
-
-                    self._log_metric_dict(
-                        preds=preds_expanded,
-                        labels=labels_expanded,
-                        metrics=metrics,
-                        measurement=measurement,
-                        split=split,
-                        cat=MetricCategories.REGRESSION,
-                    )
-                elif task_type == DataModality.UNIVARIATE_REGRESSION and self.metrics_config.do_log(
-                    split, MetricCategories.REGRESSION
-                ):
-                    # Here, like for TTE, we need to sample from the returned distribution before we can use
-                    # it directly. Here we also need to limit to just those events that are actually observed.
-                    # Like above, the assumption here is that preds and labels correspond to predictions for
-                    # and labels of the events at their indexed position; not for the subsequent event. So we
-                    # don't need to shift `results['event_mask']` here to account for that.
-                    # We ignore the is observed distribution here.
-                    _, dist = results["preds"]["regression"][measurement]
-                    preds = dist.sample()[mask]
-                    labels = results["labels"]["regression"][measurement][mask]
-
-                    self._log_metric_dict(
-                        preds=preds,
-                        labels=labels,
-                        metrics=metrics,
-                        measurement=measurement,
-                        split=split,
-                        cat=MetricCategories.REGRESSION,
-                    )
 
     def training_step(self, batch: PytorchBatch, batch_idx: int) -> torch.Tensor:
         """Training step.
@@ -486,7 +323,6 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
 
 
 SKIP_CFG_PARAMS = {"seq_attention_layers", "dep_graph_attention_layers", "hidden_size"}
-
 
 @hydra_dataclass
 class PretrainConfig:
@@ -580,6 +416,8 @@ def train(cfg: PretrainConfig):
     optimization_config = cfg.optimization_config
     data_config = cfg.data_config
 
+    print(cfg.data_config)
+
     config.set_to_dataset(train_pyd)
     optimization_config.set_to_dataset(train_pyd)
 
@@ -605,19 +443,12 @@ def train(cfg: PretrainConfig):
             cfg.save_dir / "final_validation_metrics_config.json", do_overwrite=cfg.do_overwrite
         )
 
-    # Model
     LM = ESTForGenerativeSequenceModelingLM(
         config=config,
         optimization_config=optimization_config,
         metrics_config=cfg.pretraining_metrics_config,
     )
 
-    # TODO(mmd): Get this working!
-    # if cfg.compile:
-    #     logger.info("Compiling model!")
-    #     LM = torch.compile(LM)
-
-    # Setting up torch dataloader
     train_dataloader = torch.utils.data.DataLoader(
         train_pyd,
         batch_size=optimization_config.batch_size,
@@ -637,8 +468,8 @@ def train(cfg: PretrainConfig):
     # This will track the learning rate value as it updates through warmup and decay.
     callbacks = [
         LearningRateMonitor(logging_interval="step"),
-        MonitorInputCallback(),
-        AnomalyDetectionCallback(action='zero', print_batch_on_anomaly=True, checkpoint_on_anomaly=False),
+        # MonitorInputCallback(),
+        # AnomalyDetectionCallback(action='zero', print_batch_on_anomaly=True, checkpoint_on_anomaly=False),
     ]
     if optimization_config.patience is not None:
         callbacks.append(
@@ -706,6 +537,23 @@ def train(cfg: PretrainConfig):
                 json.dump(tuning_metrics, f)
             with open(cfg.save_dir / "held_out_metrics.json", mode="w") as f:
                 json.dump(held_out_metrics, f)
+
+        for q in EVAL_QUERIES:
+            cfg.data_config.static_query_mode=True
+            cfg.data_config.static_query_name=q['name']
+            cfg.data_config.static_query_code=q['code']
+            cfg.data_config.static_query_range=q['range']
+            held_out_pyd = PytorchDataset(cfg.data_config, split="held_out")
+            held_out_dataloader = torch.utils.data.DataLoader(
+                held_out_pyd,
+                batch_size=optimization_config.validation_batch_size,
+                num_workers=optimization_config.num_dataloader_workers,
+                collate_fn=held_out_pyd.collate,
+                shuffle=False,
+            )
+            LM.static_query_prefix = q['name']
+            trainer.validate(model=LM, dataloaders=tuning_dataloader)
+            trainer.test(model=LM, dataloaders=held_out_dataloader)
 
         return tuning_metrics[0]["tuning/loss"], tuning_metrics, held_out_metrics
 
