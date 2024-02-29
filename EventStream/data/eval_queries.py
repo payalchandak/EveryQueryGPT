@@ -106,7 +106,7 @@ EVAL_QUERIES = [
         'range':(.0,.0),
     },
     {
-        'name': 'Thrombus/Embolism',
+        'name': 'Thrombus or embolism',
         'code':'Thrombus/Embolism',
         'range':(.0,.0),
     },

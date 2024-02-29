@@ -120,10 +120,6 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
             }
         )
 
-        # For judging our ability to predict time-to-event, we'll use the following scores:
-        #   1. Explained Variance
-        #   2. Mean Squared Error
-        #   3. Mean Squared Log Error
         self.tte_metrics = torch.nn.ModuleDict(
             {
                 "MSE": torchmetrics.MeanSquaredError(),
@@ -255,16 +251,17 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
             return 
         
         self.log(f"{split}/loss", results["loss"], **log_kwargs)
-        self.log(f"{split}/manual_loss", results["manual_loss"], **log_kwargs)
-        self.log(f"{split}/dloss_drate", results["dloss_drate"], **log_kwargs)
+        # self.log(f"{split}/manual_loss", results["manual_loss"], **log_kwargs)
+        # self.log(f"{split}/dloss_drate", results["dloss_drate"], **log_kwargs)
 
         for metric_name, metric in self.rate_regression_metrics.items():
             self.log(f"{split}/{metric_name}", metric(results["rate"], results["answer"].float()), **log_kwargs)
 
-        self.logger.experiment.log({
-            f"{split}/rate": wandb.Histogram(np.array(results["rate"].tolist())),
-            f"{split}/log_rate": wandb.Histogram(np.array(results["log_rate"].tolist())),
-        })
+        if split != 'train': 
+            self.logger.experiment.log({
+                f"{split}/rate": wandb.Histogram(np.array(results["rate"].tolist())),
+                f"{split}/log_rate": wandb.Histogram(np.array(results["log_rate"].tolist())),
+            })
         
         return 
 
@@ -416,8 +413,6 @@ def train(cfg: PretrainConfig):
     optimization_config = cfg.optimization_config
     data_config = cfg.data_config
 
-    print(cfg.data_config)
-
     config.set_to_dataset(train_pyd)
     optimization_config.set_to_dataset(train_pyd)
 
@@ -454,7 +449,7 @@ def train(cfg: PretrainConfig):
         batch_size=optimization_config.batch_size,
         num_workers=optimization_config.num_dataloader_workers,
         collate_fn=train_pyd.collate,
-        shuffle=False, # (todo) REVERT TO TRUE 
+        shuffle=True, 
     )
     tuning_dataloader = torch.utils.data.DataLoader(
         tuning_pyd,
@@ -464,8 +459,6 @@ def train(cfg: PretrainConfig):
         shuffle=False,
     )
 
-    # Setting up model configurations
-    # This will track the learning rate value as it updates through warmup and decay.
     callbacks = [
         LearningRateMonitor(logging_interval="step"),
         # MonitorInputCallback(),

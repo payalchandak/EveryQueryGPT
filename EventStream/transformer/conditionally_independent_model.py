@@ -48,12 +48,13 @@ class EveryQueryOutputLayer(torch.nn.Module):
         dloss_drate = torch.mean( 1 - ( answer / rate ) )
         
         out = {
-            'manual_loss':manual_loss, 
             'loss':loss, 
-            'rate':rate.squeeze(),
             'log_rate':log_rate.squeeze(),
-            'dloss_drate': dloss_drate.squeeze(),
+            'rate':rate.squeeze(),
             'answer': answer.squeeze(),
+            'manual_loss':manual_loss, 
+            'dloss_drate': dloss_drate.squeeze(),
+            
         }
         return out 
         
