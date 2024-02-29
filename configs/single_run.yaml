@@ -58,12 +58,12 @@ trainer_config:
   devices: auto
   detect_anomaly: False
   log_every_n_steps: 10
-  strategy: ddp_find_unused_parameters_true
+  strategy: auto #ddp_find_unused_parameters_true
   # gradient_clip_val: 10
   # gradient_clip_algorithm: 'value'
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
-  name: everyquery
+  name: shared-data-embed-layer
   entity: payal-collabs
   project: EveryQueryGPT
   team: null
