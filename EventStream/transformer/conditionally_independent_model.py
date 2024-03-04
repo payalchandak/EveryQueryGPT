@@ -28,8 +28,10 @@ class EveryQueryOutputLayer(torch.nn.Module):
         config: StructuredTransformerConfig,
     ):
         super().__init__()
-        self.proj = torch.nn.Linear(config.hidden_size * 2, 1) 
-        self.objective = torch.nn.PoissonNLLLoss(log_input=True)
+        self.rate_proj = torch.nn.Linear(config.hidden_size * 2, 1) 
+        self.zero_proj = torch.nn.Linear(config.hidden_size * 2, 1) 
+        self.zero_objective = torch.nn.BCEWithLogitsLoss()
+        # self.objective = torch.nn.PoissonNLLLoss(log_input=True)
         # (todo) update config to include separate query_hidden_size 
 
     def forward(
@@ -41,20 +43,32 @@ class EveryQueryOutputLayer(torch.nn.Module):
         
         assert encoded_context.shape == encoded_query.shape, f"encoded_context {encoded_context.shape} and encoded_query {encoded_query.shape} should be (batch_size, hidden_size)"
         
-        log_rate = self.proj(torch.cat([encoded_context, encoded_query], dim=1)) 
-        loss = self.objective(log_rate, answer)
-        rate = torch.exp(log_rate)
-        manual_loss = torch.mean( rate - (answer * torch.log(rate)) )
-        dloss_drate = torch.mean( 1 - ( answer / rate ) )
+        proj_inputs = torch.cat([encoded_context, encoded_query], dim=1)
+        
+        zero_mask = (answer == .0).float()
+        zero_logits = self.zero_proj(proj_inputs).squeeze(dim=-1)
+        zero_loss = self.zero_objective(zero_logits, zero_mask)
+        zero_loss = torch.mean(zero_loss)
+
+        non_zero_mask = (answer != .0)
+        log_rate = self.rate_proj(proj_inputs[non_zero_mask]) 
+        # torch.nn.functional.elu has Image (-1, 1), but we need our rate parameter to be > 0. So we need to
+        # add 1 to the output here. To ensure validity given numerical imprecision, we also add a buffer given
+        # by the smallest possible positive value permissible given the type of `embed`.
+        rate = torch.nn.functional.elu(log_rate) + 1 + torch.finfo(log_rate.dtype).tiny
+        rate = rate.squeeze(dim=-1) # Squeeze from (batch_size, 1) to (batch_size)
+        trucated_poisson_loss = - (answer * torch.log(rate)) + torch.log( torch.exp(rate) - 1)
+        trucated_poisson_loss = torch.mean(trucated_poisson_loss)
+
+        loss = zero_loss + trucated_poisson_loss
         
         out = {
             'loss':loss, 
+            'trucated_poisson_loss':trucated_poisson_loss, 
+            'zero_loss':zero_loss, 
             'log_rate':log_rate.squeeze(),
             'rate':rate.squeeze(),
             'answer': answer.squeeze(),
-            'manual_loss':manual_loss, 
-            'dloss_drate': dloss_drate.squeeze(),
-            
         }
         return out 
         
