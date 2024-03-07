@@ -21,6 +21,43 @@ from .transformer import (
     time_from_deltas,
 )
 
+class EveryQueryOutputLayerwithPoissonLoss(torch.nn.Module):
+
+    def __init__(
+        self,
+        config: StructuredTransformerConfig,
+    ):
+        super().__init__()
+        self.proj = torch.nn.Linear(config.hidden_size * 2, 1) 
+        self.objective = torch.nn.PoissonNLLLoss(log_input=True)
+        # (todo) update config to include separate query_hidden_size 
+
+    def forward(
+        self,
+        encoded_context: torch.FloatTensor,
+        encoded_query: torch.FloatTensor,
+        answer: torch.FloatTensor,
+    ) -> torch.FloatTensor:
+        
+        assert encoded_context.shape == encoded_query.shape, f"encoded_context {encoded_context.shape} and encoded_query {encoded_query.shape} should be (batch_size, hidden_size)"
+        
+        log_rate = self.proj(torch.cat([encoded_context, encoded_query], dim=1)) 
+        loss = self.objective(log_rate, answer)
+        rate = torch.exp(log_rate)
+        manual_loss = torch.mean( rate - (answer * torch.log(rate)) )
+        dloss_drate = torch.mean( 1 - ( answer / rate ) )
+        
+        out = {
+            'loss':loss, 
+            'log_rate':log_rate.squeeze(),
+            'rate':rate.squeeze(),
+            'answer': answer.squeeze(),
+            'manual_loss':manual_loss, 
+            'dloss_drate': dloss_drate.squeeze(),
+            
+        }
+        return out 
+        
 class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLoss(torch.nn.Module):
 
     def __init__(
