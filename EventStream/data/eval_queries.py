@@ -175,6 +175,41 @@ EVAL_QUERIES = [
         'code':'Pulse',
         'range':(0.,60.),
     },
+    {
+        'name': 'Endometriosis',
+        'code':'Endometriosis of ovary',
+        'range':(.0,.0),
+    },
+    {
+        'name': 'Pregnancy',
+        'code':'Pregnancy examination or test, positive result',
+        'range':(.0,.0),
+    },
+    {
+        'name': 'Diabetes in pregnancy',
+        'code':'Diabetes mellitus of mother, complicating pregnancy, childbirth, or the puerperium, unspecified as to episode of care',
+        'range':(.0,.0),
+    },
+    {
+        'name': 'Prostate cancer',
+        'code':'Malignant neoplasm of prostate',
+        'range':(.0,.0),
+    },
+    {
+        'name': 'Androgenic alopecia',
+        'code':'Androgenic alopecia, unspecified',
+        'range':(.0,.0),
+    },
+    {
+        'name': 'Senile osteoporosis',
+        'code':'Senile osteoporosis',
+        'range':(.0,.0),
+    },
+    {
+        'name': 'Senile dementia',
+        'code':'Senile dementia with delirium',
+        'range':(.0,.0),
+    },
 ]
 
 
