@@ -21,19 +21,30 @@ from .transformer import (
     time_from_deltas,
 )
 
-class EveryQueryOutputLayer(torch.nn.Module):
+class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLoss(torch.nn.Module):
 
     def __init__(
         self,
         config: StructuredTransformerConfig,
     ):
         super().__init__()
-        self.rate_proj = torch.nn.Linear(config.hidden_size * 2, 1) 
+        self.rate_proj = torch.nn.Sequential(
+            torch.nn.Linear(config.hidden_size*2, 1),
+            torch.nn.ReLU(),
+        )
         self.zero_proj = torch.nn.Linear(config.hidden_size * 2, 1) 
         self.zero_objective = torch.nn.BCEWithLogitsLoss()
-        # self.objective = torch.nn.PoissonNLLLoss(log_input=True)
         # (todo) update config to include separate query_hidden_size 
-
+    
+    def stable_log_exp_minus_one_exp(self, x):
+        # torch.exp(x) - torch.log(torch.special.expm1(torch.exp(x))) 
+        # this difference is numerically zero at 2.683
+        threshold = torch.tensor(2.6)
+        large_x_approximation = torch.exp(x)
+        small_x_approximation = torch.log(torch.special.expm1(torch.exp(x)))
+        result = torch.where(x > threshold, large_x_approximation, small_x_approximation)
+        return result
+    
     def forward(
         self,
         encoded_context: torch.FloatTensor,
@@ -51,24 +62,23 @@ class EveryQueryOutputLayer(torch.nn.Module):
         zero_loss = torch.mean(zero_loss)
 
         non_zero_mask = (answer != .0)
+        non_zero_answer = answer[non_zero_mask]
+        # Since we have cross entropy loss, the minimum value for rate should be 1. 
+        # This means the minimum value for log_rate is 0, and thus we put it through a ReLU. 
         log_rate = self.rate_proj(proj_inputs[non_zero_mask]) 
-        # torch.nn.functional.elu has Image (-1, 1), but we need our rate parameter to be > 0. So we need to
-        # add 1 to the output here. To ensure validity given numerical imprecision, we also add a buffer given
-        # by the smallest possible positive value permissible given the type of `embed`.
-        rate = torch.nn.functional.elu(log_rate) + 1 + torch.finfo(log_rate.dtype).tiny
-        rate = rate.squeeze(dim=-1) # Squeeze from (batch_size, 1) to (batch_size)
-        trucated_poisson_loss = - (answer * torch.log(rate)) + torch.log( torch.exp(rate) - 1)
+        rate = torch.exp(log_rate) 
+        trucated_poisson_loss = - (non_zero_answer * log_rate) + self.stable_log_exp_minus_one_exp(log_rate)
         trucated_poisson_loss = torch.mean(trucated_poisson_loss)
-
         loss = zero_loss + trucated_poisson_loss
         
         out = {
             'loss':loss, 
             'trucated_poisson_loss':trucated_poisson_loss, 
             'zero_loss':zero_loss, 
+            'num_pos_rate':torch.sum(non_zero_mask),
             'log_rate':log_rate.squeeze(),
             'rate':rate.squeeze(),
-            'answer': answer.squeeze(),
+            'answer': non_zero_answer.squeeze(),
         }
         return out 
         
