@@ -114,7 +114,6 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
 
         self.rate_regression_metrics = torch.nn.ModuleDict(
             {
-                "pearson": torchmetrics.PearsonCorrCoef(),
                 "r2score": torchmetrics.R2Score(),
                 "mse": torchmetrics.MeanSquaredError(),
             }
@@ -251,18 +250,21 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
             return 
         
         self.log(f"{split}/loss", results["loss"], **log_kwargs)
-        # self.log(f"{split}/manual_loss", results["manual_loss"], **log_kwargs)
-        # self.log(f"{split}/dloss_drate", results["dloss_drate"], **log_kwargs)
+        if 'zero_loss' in results.keys(): self.log(f"{split}/zero_loss", results["zero_loss"], **log_kwargs)
+        if 'trucated_poisson_loss' in results.keys(): self.log(f"{split}/trucated_poisson_loss", results["trucated_poisson_loss"], **log_kwargs)
 
-        for metric_name, metric in self.rate_regression_metrics.items():
-            self.log(f"{split}/{metric_name}", metric(results["rate"], results["answer"].float()), **log_kwargs)
+        log_rate_regression_metrics = True
+        if 'num_pos_rate' in results.keys() and results['num_pos_rate'] <= 1: log_rate_regression_metrics = False
+        if log_rate_regression_metrics: 
+            for metric_name, metric in self.rate_regression_metrics.items():
+                self.log(f"{split}/{metric_name}", metric(results["rate"], results["answer"].float()), **log_kwargs)
 
         if split != 'train': 
             self.logger.experiment.log({
                 f"{split}/rate": wandb.Histogram(np.array(results["rate"].tolist())),
                 f"{split}/log_rate": wandb.Histogram(np.array(results["log_rate"].tolist())),
             })
-        
+       
         return 
 
     def training_step(self, batch: PytorchBatch, batch_idx: int) -> torch.Tensor:
@@ -462,7 +464,7 @@ def train(cfg: PretrainConfig):
     callbacks = [
         LearningRateMonitor(logging_interval="step"),
         # MonitorInputCallback(),
-        # AnomalyDetectionCallback(action='zero', print_batch_on_anomaly=True, checkpoint_on_anomaly=False),
+        AnomalyDetectionCallback(action='zero', print_batch_on_anomaly=True, checkpoint_on_anomaly=False),
     ]
     if optimization_config.patience is not None:
         callbacks.append(
