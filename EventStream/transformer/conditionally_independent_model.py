@@ -44,7 +44,7 @@ class EveryQueryOutputLayerwithPoissonLoss(torch.nn.Module):
         log_rate = self.proj(torch.cat([encoded_context, encoded_query], dim=1)) 
         loss = self.objective(log_rate, answer)
         rate = torch.exp(log_rate)
-        manual_loss = torch.mean( rate - (answer * torch.log(rate)) )
+        manual_loss = torch.mean( rate - (answer * log_rate) ) 
         dloss_drate = torch.mean( 1 - ( answer / rate ) )
         
         out = {
@@ -100,8 +100,8 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLoss(torch.nn.Module):
 
         non_zero_mask = (answer != .0)
         non_zero_answer = answer[non_zero_mask]
-        # Since we have cross entropy loss, the minimum value for rate should be 1. 
-        # This means the minimum value for log_rate is 0, and thus we put it through a ReLU. 
+        # Since we have cross entropy loss for zero rates, the minimum value for rate should be 1. 
+        # This means the minimum value for log_rate is 0, and thus we can put it through a ReLU. 
         log_rate = self.rate_proj(proj_inputs[non_zero_mask]) 
         rate = torch.exp(log_rate) 
         trucated_poisson_loss = - (non_zero_answer * log_rate) + self.stable_log_exp_minus_one_exp(log_rate)
@@ -148,7 +148,7 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
         # add trainer strategy ddp find unused true in config if using separate embedding layers 
         self.query_embedding_layer = self.context_encoder.input_layer.data_embedding_layer.query_embedding
         self.query_encoder = None # MLP ?? 
-        self.output_layer = EveryQueryOutputLayer(config)
+        self.output_layer = EveryQueryOutputLayerwithPoissonLoss(config)
     
     def safe_max_seq_dim(self, X: torch.Tensor, mask: torch.BoolTensor):
         # X is batch_size, seq_len, hidden_dim
