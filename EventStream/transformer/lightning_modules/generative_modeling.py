@@ -244,25 +244,26 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
 
         log_kwargs = {"batch_size": self.optimization_config.batch_size, "sync_dist": True}
 
-        if self.static_query_prefix: 
-            for metric_name, metric in self.rate_regression_metrics.items():
-                self.log(f"{split}/{self.static_query_prefix} {metric_name}", metric(results["rate"], results["answer"].float()), **log_kwargs)
-            return 
-        
-        self.log(f"{split}/loss", results["loss"], **log_kwargs)
-        if 'zero_loss' in results.keys(): self.log(f"{split}/zero_loss", results["zero_loss"], **log_kwargs)
-        if 'trucated_poisson_loss' in results.keys(): self.log(f"{split}/trucated_poisson_loss", results["trucated_poisson_loss"], **log_kwargs)
+        for metric_name, metric in self.rate_regression_metrics.items():
+            try: 
+                val = metric(results["rate"], results["answer"].float())
+                if self.static_query_prefix: 
+                    self.log(f"{split}/{self.static_query_prefix} {metric_name}", val, **log_kwargs)
+                else: 
+                    self.log(f"{split}/{metric_name}", val, **log_kwargs)
+            except: 
+                print(f"failed to compute {metric_name} from {results['rate']} and {results['answer'].float()}")
+            
 
-        log_rate_regression_metrics = True
-        if 'num_pos_rate' in results.keys() and results['num_pos_rate'] <= 1: log_rate_regression_metrics = False
-        if log_rate_regression_metrics: 
-            for metric_name, metric in self.rate_regression_metrics.items():
-                self.log(f"{split}/{metric_name}", metric(results["rate"], results["answer"].float()), **log_kwargs)
+        if self.static_query_prefix: return 
+
+        for k in results.keys(): 
+            if k.endswith('loss'): 
+                self.log(f"{split}/{k}", results[k], **log_kwargs)
 
         if split != 'train': 
             self.logger.experiment.log({
                 f"{split}/rate": wandb.Histogram(np.array(results["rate"].tolist())),
-                f"{split}/log_rate": wandb.Histogram(np.array(results["log_rate"].tolist())),
             })
        
         return 
@@ -359,6 +360,7 @@ class PretrainConfig:
             "strategy": None,
             "gradient_clip_val": None, 
             "gradient_clip_algorithm": None,
+            "fast_dev_run": False,
         }
     )
 
@@ -452,6 +454,7 @@ def train(cfg: PretrainConfig):
         num_workers=optimization_config.num_dataloader_workers,
         collate_fn=train_pyd.collate,
         shuffle=True, 
+        drop_last=True, # TODO REMOVE 
     )
     tuning_dataloader = torch.utils.data.DataLoader(
         tuning_pyd,

@@ -32,7 +32,7 @@ optimization_config:
   end_lr: null
   max_epochs: 100
   batch_size: 128
-  validation_batch_size: 32
+  validation_batch_size: 64
   lr_frac_warmup_steps: 0.05
   lr_decay_power: 1
   weight_decay: 0.1
@@ -50,20 +50,19 @@ data_config:
   do_include_subject_id: False
   do_include_start_time_min: False
   static_query_mode: False 
-  static_query_name: None 
-  static_query_code: None 
-  static_query_range: [0,0]
+  static_query: None 
 trainer_config:
   accelerator: auto
   devices: auto
-  detect_anomaly: False
+  detect_anomaly: True
   log_every_n_steps: 10
   strategy: auto #ddp_find_unused_parameters_true
   # gradient_clip_val: 10
   # gradient_clip_algorithm: 'value'
+  fast_dev_run: False 
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
-  name: shared-data-embed-layer
+  name: bce-truncated-debug
   entity: payal-collabs
   project: EveryQueryGPT
   team: null

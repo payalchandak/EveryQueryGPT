@@ -71,7 +71,6 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLoss(torch.nn.Module):
         )
         self.zero_proj = torch.nn.Linear(config.hidden_size * 2, 1) 
         self.zero_objective = torch.nn.BCEWithLogitsLoss()
-        # (todo) update config to include separate query_hidden_size 
     
     def stable_log_exp_minus_one_exp(self, x):
         # torch.exp(x) - torch.log(torch.special.expm1(torch.exp(x))) 
@@ -93,29 +92,32 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLoss(torch.nn.Module):
         
         proj_inputs = torch.cat([encoded_context, encoded_query], dim=1)
         
-        zero_mask = (answer == .0).float()
         zero_logits = self.zero_proj(proj_inputs).squeeze(dim=-1)
-        zero_loss = self.zero_objective(zero_logits, zero_mask)
+        zero_loss = self.zero_objective(zero_logits, (answer == .0).float())
         zero_loss = torch.mean(zero_loss)
 
-        non_zero_mask = (answer != .0)
-        non_zero_answer = answer[non_zero_mask]
         # Since we have cross entropy loss for zero rates, the minimum value for rate should be 1. 
-        # This means the minimum value for log_rate is 0, and thus we can put it through a ReLU. 
-        log_rate = self.rate_proj(proj_inputs[non_zero_mask]) 
-        rate = torch.exp(log_rate) 
-        trucated_poisson_loss = - (non_zero_answer * log_rate) + self.stable_log_exp_minus_one_exp(log_rate)
-        trucated_poisson_loss = torch.mean(trucated_poisson_loss)
+        # This means the minimum value for log_rate is 0, and thus we can put it through a ReLU.     
+        log_rate = self.rate_proj(proj_inputs)
+
+        mask = (answer != .0)
+        if torch.sum(mask) > 0: 
+            trucated_poisson_loss = - (answer[mask] * log_rate[mask]) + self.stable_log_exp_minus_one_exp(log_rate[mask])
+            trucated_poisson_loss = torch.mean(trucated_poisson_loss)
+        else:
+            trucated_poisson_loss = 0 
+
         loss = zero_loss + trucated_poisson_loss
+
+        zero_prob = torch.sigmoid(zero_logits)
+        rate = torch.where(zero_prob >= 0.5, torch.zeros_like(zero_prob), torch.exp(log_rate).squeeze())
         
         out = {
             'loss':loss, 
             'trucated_poisson_loss':trucated_poisson_loss, 
             'zero_loss':zero_loss, 
-            'num_pos_rate':torch.sum(non_zero_mask),
-            'log_rate':log_rate.squeeze(),
             'rate':rate.squeeze(),
-            'answer': non_zero_answer.squeeze(),
+            'answer': answer.squeeze(),
         }
         return out 
         
@@ -148,7 +150,7 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
         # add trainer strategy ddp find unused true in config if using separate embedding layers 
         self.query_embedding_layer = self.context_encoder.input_layer.data_embedding_layer.query_embedding
         self.query_encoder = None # MLP ?? 
-        self.output_layer = EveryQueryOutputLayerwithPoissonLoss(config)
+        self.output_layer = EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLoss(config)
     
     def safe_max_seq_dim(self, X: torch.Tensor, mask: torch.BoolTensor):
         # X is batch_size, seq_len, hidden_dim
