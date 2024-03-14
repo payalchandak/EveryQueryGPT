@@ -49,8 +49,11 @@ data_config:
   do_include_subsequence_indices: False
   do_include_subject_id: False
   do_include_start_time_min: False
-  static_query_mode: False 
-  static_query: None 
+  fixed_code_mode: False 
+  fixed_code: None 
+  fixed_time_mode: False 
+  fixed_time: None   
+  
 trainer_config:
   accelerator: auto
   devices: auto

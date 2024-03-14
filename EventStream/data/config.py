@@ -892,18 +892,12 @@ class PytorchDatasetConfig(JSONableMixin):
     # Trades off between speed/disk/mem and support
     cache_for_epochs: int = 1
 
-    static_query_mode: bool = False
-    static_query: dict | None = None
+    fixed_code_mode: bool = False
+    fixed_code: dict | None = None
 
-    # static_query_name: str | None = None 
-    # static_query_code: str | None = None 
-    # logging_name
-    # code_name
-    # code_unnormalized_range_min
-    # code_unnormalized_range_max
-    # start_offset_days 
-    # duration_days 
-    # static_query_range: tuple[float, float] = (.0, .0) # unnormalized range
+    fixed_time_mode: bool = False
+    time: dict | None = None
+
 
     def __post_init__(self):
         if self.cache_for_epochs is None:
@@ -1114,8 +1108,8 @@ class PytorchDatasetConfig(JSONableMixin):
 
     def sample_code(self)->tuple[str, int, bool]: 
 
-        if self.static_query_mode: 
-            code = [code for code in self._all_query_codes if code['name']==self.static_query['code']][0]
+        if self.fixed_code_mode: 
+            code = [code for code in self._all_query_codes if code['name']==self.fixed_code['code']][0]
         else:
             buckets = [*zip( np.concatenate([[0],np.logspace(-5, -1, 5)]), np.logspace(-5, 0, 6))]
             obs_freq_start, obs_freq_end = random.choice(buckets)
@@ -1124,13 +1118,13 @@ class PytorchDatasetConfig(JSONableMixin):
 
         code['range_min'], code['range_max'] = .0, .0
         if code['has_value']:
-            if self.static_query_mode: 
-                if 'range_min' not in self.static_query.keys(): raise ValueError(f"Need to specify range_min for {self.static_query['name']}, specify .0 for mean")
-                if 'range_max' not in self.static_query.keys(): raise ValueError(f"Need to specify range_max for {self.static_query['name']}, specify .0 for mean")
-                if (self.static_query['range_min'] != .0) and (self.static_query['range_max'] != .0):
+            if self.fixed_code_mode: 
+                if 'range_min' not in self.fixed_code.keys(): raise ValueError(f"Need to specify range_min for {self.fixed_code['name']}, specify .0 for mean")
+                if 'range_max' not in self.fixed_code.keys(): raise ValueError(f"Need to specify range_max for {self.fixed_code['name']}, specify .0 for mean")
+                if (self.fixed_code['range_min'] != .0) and (self.fixed_code['range_max'] != .0):
                     # range is provided in un-normalized units 
-                    code['range_min'] = (self.static_query['range_min'] - code['normalizer_mean']) / code['normalizer_std']
-                    code['range_max'] = (self.static_query['range_max'] - code['normalizer_mean']) / code['normalizer_std']
+                    code['range_min'] = (self.fixed_code['range_min'] - code['normalizer_mean']) / code['normalizer_std']
+                    code['range_max'] = (self.fixed_code['range_max'] - code['normalizer_mean']) / code['normalizer_std']
             else: 
                 # range is a random interval from the support of the normal distribution sampled according to its density 
                 code['range_min'], code['range_max'] = sorted([scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1), 
