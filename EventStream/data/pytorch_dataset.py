@@ -545,6 +545,11 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         max_query_duration = self.config.max_duration_days * 60*24
         min_query_start_offset = self.config.min_offset_days * 60*24 
         max_query_start_offset = self.config.max_offset_days * 60*24 
+        if self.config.fixed_time_mode: 
+            if 'duration' in self.config.fixed_time: 
+                fixed_duration = self.config.fixed_time['duration'] * 60*24 
+            if 'offset' in self.config.fixed_time:
+                fixed_offset =  self.config.fixed_time['offset'] * 60*24 
 
         # sample query duration
         start_time = full_subj_data["start_time"].timestamp() / 60 # minutes 
@@ -561,8 +566,8 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         if self.config.fixed_time_mode: 
             enough_future_observed = True 
             if 'duration' in self.config.fixed_time: 
-                query_duration = self.config.fixed_time['duration']
-                enough_future_observed = record_duration > (min_input_duration + query_duration)
+                query_duration = fixed_duration
+                enough_future_observed = record_duration > (min_input_duration + fixed_duration)
             if not enough_future_observed: query_duration = min_query_duration
         normalized_query_duration = (query_duration - min_query_duration) / (max_query_duration - min_query_duration)
 
@@ -580,11 +585,11 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         # NOTE this does not support non-zero min offset yet 
         query_start_offset = np.random.sample() * min((record_duration - times[input_end_idx] - query_duration), max_query_start_offset)
         if self.config.fixed_time_mode and 'offset' in self.config.fixed_time:
-            if self.config.fixed_time['offset'] > (record_duration - times[input_end_idx] - query_duration): 
+            if fixed_offset > (record_duration - times[input_end_idx] - query_duration): 
                 enough_future_observed = False 
                 query_start_offset = 0
             else: 
-                query_start_offset = self.config.fixed_time['offset']
+                query_start_offset = fixed_offset
         normalized_query_start_offset = (query_start_offset - min_query_start_offset) / (max_query_start_offset - min_query_start_offset)
     
         # get query indices

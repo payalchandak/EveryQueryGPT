@@ -943,13 +943,6 @@ class PytorchDatasetConfig(JSONableMixin):
                 pass
             case _:
                 raise TypeError(f"train_subset_size is of unrecognized type {type(self.train_subset_size)}.")
-            
-        # convert fixed time params to mins assuming they are defined in days  
-        if self.fixed_time_mode: 
-            if 'duration' in self.fixed_time: 
-                self.fixed_time['duration'] *= 60*24 
-            if 'offset' in self.fixed_time: 
-                self.fixed_time['offset'] *= 60*24 
 
     def to_dict(self) -> dict:
         """Represents this configuration object as a plain dictionary."""

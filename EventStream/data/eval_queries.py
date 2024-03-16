@@ -1,6 +1,5 @@
-EVAL_OFFSET = 0
-EVAL_DURATION  = 365
-EVAL_QUERIES = [
+EVAL_TIME = {'duration':365, 'offset':0}
+EVAL_CODES = [
     {
         'name': 'High NT-proBNP',
         'code':'N-terminal pro-brain natriuretic peptide',
