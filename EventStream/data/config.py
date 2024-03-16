@@ -892,11 +892,16 @@ class PytorchDatasetConfig(JSONableMixin):
     # Trades off between speed/disk/mem and support
     cache_for_epochs: int = 1
 
+    min_duration_hours: float = 1 
+    max_duration_days: float = 365 
+    min_offset_days: float = 0 
+    max_offset_days: float = 365 
+
     fixed_code_mode: bool = False
     fixed_code: dict | None = None
 
     fixed_time_mode: bool = False
-    time: dict | None = None
+    fixed_time: dict | None = None
 
 
     def __post_init__(self):
@@ -938,6 +943,13 @@ class PytorchDatasetConfig(JSONableMixin):
                 pass
             case _:
                 raise TypeError(f"train_subset_size is of unrecognized type {type(self.train_subset_size)}.")
+            
+        # convert fixed time params to mins assuming they are defined in days  
+        if self.fixed_time_mode: 
+            if 'duration' in self.fixed_time: 
+                self.fixed_time['duration'] *= 60*24 
+            if 'offset' in self.fixed_time: 
+                self.fixed_time['offset'] *= 60*24 
 
     def to_dict(self) -> dict:
         """Represents this configuration object as a plain dictionary."""

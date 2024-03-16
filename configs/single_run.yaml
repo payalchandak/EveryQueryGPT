@@ -49,11 +49,14 @@ data_config:
   do_include_subsequence_indices: False
   do_include_subject_id: False
   do_include_start_time_min: False
+  min_duration_hours: 1 
+  max_duration_days: 365
+  min_offset_days: 0
+  max_offset_days: 365
   fixed_code_mode: False 
   fixed_code: None 
   fixed_time_mode: False 
   fixed_time: None   
-  
 trainer_config:
   accelerator: auto
   devices: auto
