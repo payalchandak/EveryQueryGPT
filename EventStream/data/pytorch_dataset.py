@@ -488,7 +488,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
                 },
             )
             .drop("start_time_task", "end_time_min", "start_time_min", "end_time", "task_ID")
-        )
+        )        
 
     def __len__(self):
         return len(self.cached_data)
@@ -596,14 +596,14 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         query_start_time = start_time + times[input_end_idx] + query_start_offset
         query_end_time = query_start_time + query_duration
         query_start_idx = np.min(np.argwhere((times+start_time) >= query_start_time))
-        query_end_idx = np.min(np.argwhere((times+start_time) >= query_end_time))
+        query_end_idx = np.max(np.argwhere((times+start_time) <= query_end_time), initial=query_start_idx)
         
         code = self.config.sample_code() 
         
         # calculate answer 
         answer = 0
-        query_dynamic_indices = full_subj_data['dynamic_indices'][query_start_idx:query_end_idx+1]
-        query_dynamic_values = full_subj_data['dynamic_values'][query_start_idx:query_end_idx+1]
+        query_dynamic_indices = full_subj_data['dynamic_indices'][query_start_idx:query_end_idx] 
+        query_dynamic_values = full_subj_data['dynamic_values'][query_start_idx:query_end_idx]
         for i in range(len(query_dynamic_indices)): 
             for j in range(len(query_dynamic_indices[i])): 
                 if query_dynamic_indices[i][j] == code['idx']:
