@@ -25,7 +25,7 @@ from transformers import get_polynomial_decay_schedule_with_warmup
 from ...data.config import PytorchDatasetConfig
 from ...data.pytorch_dataset import PytorchDataset
 from ...data.types import DataModality, PytorchBatch
-from ...data.eval_queries import EVAL_QUERIES
+from ...data.eval_queries import EVAL_TIME, EVAL_CODES
 from ...utils import hydra_dataclass, task_wrapper
 from ..conditionally_independent_model import CIPPTForGenerativeSequenceModeling
 from ..config import (
@@ -536,11 +536,11 @@ def train(cfg: PretrainConfig):
             with open(cfg.save_dir / "held_out_metrics.json", mode="w") as f:
                 json.dump(held_out_metrics, f)
 
-        for q in EVAL_QUERIES:
-            cfg.data_config.static_query_mode=True
-            cfg.data_config.static_query_name=q['name']
-            cfg.data_config.static_query_code=q['code']
-            cfg.data_config.static_query_range=q['range']
+        cfg.data_config.fixed_code_mode = True 
+        cfg.data_config.fixed_time_mode = True 
+        cfg.data_config.fixed_time = EVAL_TIME
+        for c in EVAL_CODES:
+            cfg.data_config.fixed_code = c
             held_out_pyd = PytorchDataset(cfg.data_config, split="held_out")
             held_out_dataloader = torch.utils.data.DataLoader(
                 held_out_pyd,
@@ -549,8 +549,7 @@ def train(cfg: PretrainConfig):
                 collate_fn=held_out_pyd.collate,
                 shuffle=False,
             )
-            LM.static_query_prefix = q['name']
-            trainer.validate(model=LM, dataloaders=tuning_dataloader)
+            LM.static_query_prefix = f"{c['name']} ({EVAL_TIME['offset']}–{EVAL_TIME['duration']+EVAL_TIME['offset']})"
             trainer.test(model=LM, dataloaders=held_out_dataloader)
 
         return tuning_metrics[0]["tuning/loss"], tuning_metrics, held_out_metrics
