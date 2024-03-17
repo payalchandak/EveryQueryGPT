@@ -133,21 +133,6 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
             raise ValueError(f"{config.structured_event_processing_mode} invalid!")
 
         self.context_encoder = ConditionallyIndependentPointProcessTransformer(config)
-        # self.separate_query_embedding_layer = DataEmbeddingLayer(
-        #     n_total_embeddings=config.vocab_size,
-        #     out_dim=config.hidden_size,
-        #     categorical_embedding_dim=config.categorical_embedding_dim,
-        #     numerical_embedding_dim=config.numerical_embedding_dim,
-        #     static_embedding_mode=config.static_embedding_mode,
-        #     split_by_measurement_indices=None,
-        #     do_normalize_by_measurement_index=config.do_normalize_by_measurement_index,
-        #     static_weight=config.static_embedding_weight,
-        #     dynamic_weight=config.dynamic_embedding_weight,
-        #     categorical_weight=config.categorical_embedding_weight,
-        #     numerical_weight=config.numerical_embedding_weight,
-        # )
-        # self.query_embedding_layer = self.separate_query_embedding_layer.query_embedding
-        # add trainer strategy ddp find unused true in config if using separate embedding layers 
         self.query_embedding_layer = self.context_encoder.input_layer.data_embedding_layer.query_embedding
         self.query_encoder = None # MLP ?? 
         self.output_layer = EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLoss(config)

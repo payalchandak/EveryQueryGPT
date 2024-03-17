@@ -54,15 +54,15 @@ data_config:
   min_offset_days: 0
   max_offset_days: 365
   fixed_code_mode: False 
-  fixed_code: None 
+  fixed_code: 
   fixed_time_mode: False 
-  fixed_time: None   
+  fixed_time: 
 trainer_config:
   accelerator: auto
   devices: auto
   detect_anomaly: True
   log_every_n_steps: 10
-  strategy: auto #ddp_find_unused_parameters_true
+  strategy: auto 
   # gradient_clip_val: 10
   # gradient_clip_algorithm: 'value'
   fast_dev_run: False 
