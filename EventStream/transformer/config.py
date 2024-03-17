@@ -855,21 +855,6 @@ class StructuredTransformerConfig(PretrainedConfig):
             if k not in self.measurements_per_generative_mode:
                 self.measurements_per_generative_mode[k] = []
 
-        # if self.structured_event_processing_mode == StructuredEventProcessingMode.NESTED_ATTENTION:
-        #     in_dep = {
-        #         x[0] if isinstance(x, (list, tuple)) and len(x) == 2 else x
-        #         for x in itertools.chain.from_iterable(self.measurements_per_dep_graph_level)
-        #     }
-        #     in_generative_mode = set(
-        #         itertools.chain.from_iterable(self.measurements_per_generative_mode.values())
-        #     )
-
-        #     if not in_generative_mode.issubset(in_dep):
-        #         raise ValueError(
-        #             "Config is attempting to generate something outside the dependency graph:\n"
-        #             f"{in_generative_mode - in_dep}"
-        #         )
-
         self.event_types_idxmap = dataset.vocabulary_config.event_types_idxmap
 
         self.vocab_offsets_by_measurement = dataset.vocabulary_config.vocab_offsets_by_measurement
