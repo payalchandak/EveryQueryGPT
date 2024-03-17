@@ -160,7 +160,7 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
         return torch.nan_to_num(maxes, nan=None, posinf=None, neginf=0)
 
     def forward(self, batch: PytorchBatch, **kwargs) -> torch.FloatTensor: 
-        context, query, answer = batch
+        context, query, answer = batch['context'], batch['query'], batch['answer']
         encoded_context = self.context_encoder(context, **kwargs)
         encoded_context = self.safe_max_seq_dim(encoded_context.last_hidden_state, context.event_mask)
         query_embed = self.query_embedding_layer(query, **kwargs) 

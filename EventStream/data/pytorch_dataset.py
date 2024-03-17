@@ -847,5 +847,9 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             queries = queries[valid_idx]
             answers = answers[valid_idx]
 
-        batch = inputs, queries, answers
+        batch = {
+            'context':inputs, 
+            'query':queries,
+            'answer':answers,
+        }
         return batch
