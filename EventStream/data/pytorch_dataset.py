@@ -311,6 +311,11 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             self.columns = self.cached_data.columns
             self.cached_data = self.cached_data.rows()
 
+        if self.split == "train": 
+            self.population_rates = self._build_population_rates(
+                window_step=30, window_length=365, zero_truncated_style=True
+            )
+
     @property
     def frac_future_is_observed(self): 
         if not self.config.fixed_time_mode: return 1.0
@@ -488,7 +493,40 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
                 },
             )
             .drop("start_time_task", "end_time_min", "start_time_min", "end_time", "task_ID")
-        )        
+        )
+
+    def _build_population_rates(self, window_step=30, window_length=365, zero_truncated_style=True):
+
+        window_step = window_step * 24*60
+        window_length = window_length * 24*60
+
+        code_occurrence = {code['idx']:[] for code in self.config._all_query_codes} 
+        for idx in range(len(self)): 
+            full_subj_data = {c: v for c, v in zip(self.columns, self.cached_data[idx])}
+            times = np.array([sum(full_subj_data["time_delta"][:i]) for i in range(1, len(full_subj_data["time_delta"])+1)])
+            record_duration = times[-1]
+            for window_start in range(0, int(record_duration - window_length), window_step): 
+                start_idx = np.min(np.argwhere((times) >= window_start))
+                end_idx = np.max(np.argwhere((times) <= window_start + window_length), initial=start_idx)
+                if start_idx == end_idx: continue # no codes observed in this window 
+                window_codes = Counter(sum(full_subj_data['dynamic_indices'][start_idx:end_idx], [])) # convert from ragged list to list then count occurrence of codes
+                if zero_truncated_style:
+                    for x in window_codes.keys():
+                        if x not in code_occurrence.keys(): continue # missing from self.config._all_query_codes, must be UNK 
+                        code_occurrence[x].append(window_codes[x])
+                else: # for true population rate, we should include zeros for codes with no observations...
+                    for x in code_occurrence.keys(): 
+                        if x in window_codes.keys(): code_occurrence[x].append(window_codes[x])
+                        else: code_occurrence[x].append(0)
+        
+        if zero_truncated_style:
+            for x in code_occurrence.keys(): 
+                if not code_occurrence[x]: 
+                    code_occurrence[x].append(0) # to prevent nans in mean where codes are never observed
+        
+        population_rates = {code_idx:np.mean(counts) for code_idx, counts in code_occurrence.items()}
+        return population_rates
+        
 
     def __len__(self):
         return len(self.cached_data)
