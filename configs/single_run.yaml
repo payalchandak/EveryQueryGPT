@@ -57,9 +57,10 @@ data_config:
   fixed_code: 
   fixed_time_mode: False 
   fixed_time: 
+  population_rates:
 trainer_config:
   accelerator: auto
-  devices: auto
+  devices: [2] #auto
   detect_anomaly: True
   log_every_n_steps: 10
   strategy: auto 
@@ -68,7 +69,7 @@ trainer_config:
   fast_dev_run: False 
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
-  name: bce-truncated-debug
+  name: population-rate
   entity: payal-collabs
   project: EveryQueryGPT
   team: null
