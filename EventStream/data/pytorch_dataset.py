@@ -525,9 +525,15 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
                     code_occurrence[x].append(0) # to prevent nans in mean where codes are never observed
         
         population_rates = {code_idx:np.mean(counts) for code_idx, counts in code_occurrence.items()}
+
+        import pickle
+        # with open('tmp_population_rates.pkl','wb') as f: 
+        #     pickle.dump(population_rates, f)
+        with open('tmp_population_rates.pkl','rb') as f: 
+            population_rates = pickle.load(f)
+            print('read population_rates from file')
         return population_rates
         
-
     def __len__(self):
         return len(self.cached_data)
 
@@ -670,6 +676,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             'code_type': code['type'],
             'range_min': code['range_min'], 
             'range_max': code['range_max'], 
+            'population_rate': code['population_rate'],
         } 
 
         item = {
@@ -874,6 +881,7 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             'range_max': torch.tensor([q['range_max'] for q in queries], dtype=torch.float),
             '_code_type': torch.tensor([1.0 for q in queries], dtype=torch.float),
             '_cat_mask':torch.tensor([True for q in queries], dtype=torch.bool),
+            'population_rate': torch.tensor([q['population_rate'] for q in queries], dtype=torch.float),
         }
 
         answers = [dct['answer'] for dct in batch]

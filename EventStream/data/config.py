@@ -903,6 +903,7 @@ class PytorchDatasetConfig(JSONableMixin):
     fixed_time_mode: bool = False
     fixed_time: dict | None = None
 
+    population_rates: dict | None = None
 
     def __post_init__(self):
         if self.cache_for_epochs is None:
@@ -1069,6 +1070,9 @@ class PytorchDatasetConfig(JSONableMixin):
 
         return all_files
     
+    def set_to_dataset(self, dataset):
+        self.population_rates = dataset.population_rates
+
     @property
     def _all_query_codes(self) -> list:
         from EventStream.data.dataset_polars import Dataset # (todo) circular import dependency if you move it out  
@@ -1135,6 +1139,7 @@ class PytorchDatasetConfig(JSONableMixin):
                 code['range_min'], code['range_max'] = sorted([scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1), 
                                                                scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1)])
 
+        code['population_rate'] = self.population_rates[code['idx']]
         return code
 
 

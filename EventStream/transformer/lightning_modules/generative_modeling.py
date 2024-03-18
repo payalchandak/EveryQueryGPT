@@ -411,7 +411,6 @@ def train(cfg: PretrainConfig):
         torch.multiprocessing.set_sharing_strategy("file_system")
 
     train_pyd = PytorchDataset(cfg.data_config, split="train")
-    tuning_pyd = PytorchDataset(cfg.data_config, split="tuning")
 
     config = cfg.config
     optimization_config = cfg.optimization_config
@@ -419,6 +418,9 @@ def train(cfg: PretrainConfig):
 
     config.set_to_dataset(train_pyd)
     optimization_config.set_to_dataset(train_pyd)
+    data_config.set_to_dataset(train_pyd)
+
+    tuning_pyd = PytorchDataset(data_config, split="tuning")
 
     if os.environ.get("LOCAL_RANK", "0") == "0":
         cfg.save_dir.mkdir(parents=True, exist_ok=True)
@@ -463,7 +465,7 @@ def train(cfg: PretrainConfig):
         collate_fn=tuning_pyd.collate,
         shuffle=False,
     )
-
+    
     callbacks = [
         LearningRateMonitor(logging_interval="step"),
         # MonitorInputCallback(),
@@ -513,7 +515,7 @@ def train(cfg: PretrainConfig):
     LM.save_pretrained(cfg.save_dir)
 
     if cfg.do_final_validation_on_metrics:
-        held_out_pyd = PytorchDataset(cfg.data_config, split="held_out")
+        held_out_pyd = PytorchDataset(data_config, split="held_out")
         held_out_dataloader = torch.utils.data.DataLoader(
             held_out_pyd,
             batch_size=optimization_config.validation_batch_size,
@@ -536,12 +538,12 @@ def train(cfg: PretrainConfig):
             with open(cfg.save_dir / "held_out_metrics.json", mode="w") as f:
                 json.dump(held_out_metrics, f)
 
-        cfg.data_config.fixed_code_mode = True 
-        cfg.data_config.fixed_time_mode = True 
-        cfg.data_config.fixed_time = EVAL_TIME
+        data_config.fixed_code_mode = True 
+        data_config.fixed_time_mode = True 
+        data_config.fixed_time = EVAL_TIME
         for c in EVAL_CODES:
-            cfg.data_config.fixed_code = c
-            held_out_pyd = PytorchDataset(cfg.data_config, split="held_out")
+            data_config.fixed_code = c
+            held_out_pyd = PytorchDataset(data_config, split="held_out")
             held_out_dataloader = torch.utils.data.DataLoader(
                 held_out_pyd,
                 batch_size=optimization_config.validation_batch_size,
