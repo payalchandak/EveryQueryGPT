@@ -497,34 +497,34 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
 
     def _build_population_rates(self, window_step=30, window_length=365, zero_truncated_style=True):
 
-        window_step = window_step * 24*60
-        window_length = window_length * 24*60
+        # window_step = window_step * 24*60
+        # window_length = window_length * 24*60
 
-        code_occurrence = {code['idx']:[] for code in self.config._all_query_codes} 
-        for idx in range(len(self)): 
-            full_subj_data = {c: v for c, v in zip(self.columns, self.cached_data[idx])}
-            times = np.array([sum(full_subj_data["time_delta"][:i]) for i in range(1, len(full_subj_data["time_delta"])+1)])
-            record_duration = times[-1]
-            for window_start in range(0, int(record_duration - window_length), window_step): 
-                start_idx = np.min(np.argwhere((times) >= window_start))
-                end_idx = np.max(np.argwhere((times) <= window_start + window_length), initial=start_idx)
-                if start_idx == end_idx: continue # no codes observed in this window 
-                window_codes = Counter(sum(full_subj_data['dynamic_indices'][start_idx:end_idx], [])) # convert from ragged list to list then count occurrence of codes
-                if zero_truncated_style:
-                    for x in window_codes.keys():
-                        if x not in code_occurrence.keys(): continue # missing from self.config._all_query_codes, must be UNK 
-                        code_occurrence[x].append(window_codes[x])
-                else: # for true population rate, we should include zeros for codes with no observations...
-                    for x in code_occurrence.keys(): 
-                        if x in window_codes.keys(): code_occurrence[x].append(window_codes[x])
-                        else: code_occurrence[x].append(0)
+        # code_occurrence = {code['idx']:[] for code in self.config._all_query_codes} 
+        # for idx in range(len(self)): 
+        #     full_subj_data = {c: v for c, v in zip(self.columns, self.cached_data[idx])}
+        #     times = np.array([sum(full_subj_data["time_delta"][:i]) for i in range(1, len(full_subj_data["time_delta"])+1)])
+        #     record_duration = times[-1]
+        #     for window_start in range(0, int(record_duration - window_length), window_step): 
+        #         start_idx = np.min(np.argwhere((times) >= window_start))
+        #         end_idx = np.max(np.argwhere((times) <= window_start + window_length), initial=start_idx)
+        #         if start_idx == end_idx: continue # no codes observed in this window 
+        #         window_codes = Counter(sum(full_subj_data['dynamic_indices'][start_idx:end_idx], [])) # convert from ragged list to list then count occurrence of codes
+        #         if zero_truncated_style:
+        #             for x in window_codes.keys():
+        #                 if x not in code_occurrence.keys(): continue # missing from self.config._all_query_codes, must be UNK 
+        #                 code_occurrence[x].append(window_codes[x])
+        #         else: # for true population rate, we should include zeros for codes with no observations...
+        #             for x in code_occurrence.keys(): 
+        #                 if x in window_codes.keys(): code_occurrence[x].append(window_codes[x])
+        #                 else: code_occurrence[x].append(0)
         
-        if zero_truncated_style:
-            for x in code_occurrence.keys(): 
-                if not code_occurrence[x]: 
-                    code_occurrence[x].append(0) # to prevent nans in mean where codes are never observed
+        # if zero_truncated_style:
+        #     for x in code_occurrence.keys(): 
+        #         if not code_occurrence[x]: 
+        #             code_occurrence[x].append(0) # to prevent nans in mean where codes are never observed
         
-        population_rates = {code_idx:np.mean(counts) for code_idx, counts in code_occurrence.items()}
+        # population_rates = {code_idx:np.mean(counts) for code_idx, counts in code_occurrence.items()}
 
         import pickle
         # with open('tmp_population_rates.pkl','wb') as f: 
@@ -864,7 +864,11 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
         Returns:
             A fully collated, tensorized, and padded batch.
         """
-
+        
+        if self.config.fixed_time_mode: 
+            fixed_time_idx = set(torch.nonzero(torch.tensor([dct['enough_future_observed'] for dct in batch], dtype=torch.bool)).view(-1).tolist())
+            batch = [dct for idx, dct in enumerate(batch) if idx in fixed_time_idx]
+        
         inputs = [dct['input'] for dct in batch]
         if self.do_produce_static_data:
             inputs = self.__static_and_dynamic_collate(inputs, do_convert_float_nans=do_convert_float_nans)
@@ -886,12 +890,6 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
 
         answers = [dct['answer'] for dct in batch]
         answers = torch.tensor(answers, dtype=torch.int64)
-
-        if self.config.fixed_time_mode: 
-            valid_idx = torch.nonzero(torch.tensor([dct['enough_future_observed'] for dct in batch], dtype=torch.bool))
-            inputs = inputs[valid_idx]
-            queries = queries[valid_idx]
-            answers = answers[valid_idx]
 
         batch = {
             'context':inputs, 
