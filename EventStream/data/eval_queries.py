@@ -1,4 +1,15 @@
-EVAL_TIME = {'duration':365, 'offset':0}
+EVAL_TIMES = [
+    {'offset':0, 'duration':365},
+    {'offset':0, 'duration':180},
+    {'offset':0, 'duration':90},
+    {'offset':0, 'duration':30},
+    {'offset':0, 'duration':7},
+    {'offset':7, 'duration':30},
+    {'offset':30, 'duration':30},
+    {'offset':90, 'duration':30},
+    {'offset':180, 'duration':30},
+    {'offset':365, 'duration':30},
+]
 EVAL_CODES = [
     {
         'name': 'High NT-proBNP',

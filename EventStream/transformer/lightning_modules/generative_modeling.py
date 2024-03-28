@@ -25,7 +25,7 @@ from transformers import get_polynomial_decay_schedule_with_warmup
 from ...data.config import PytorchDatasetConfig
 from ...data.pytorch_dataset import PytorchDataset
 from ...data.types import DataModality, PytorchBatch
-from ...data.eval_queries import EVAL_TIME, EVAL_CODES
+from ...data.eval_queries import EVAL_TIMES, EVAL_CODES
 from ...utils import hydra_dataclass, task_wrapper
 from ..conditionally_independent_model import CIPPTForGenerativeSequenceModeling
 from ..config import (
@@ -129,7 +129,6 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
                 "auroc": torchmetrics.AUROC(task="binary"),
             }
         )
-
 
     def log_metrics(self, results: dict, split: Split):
         """Logs metric results for a given output result.
@@ -442,19 +441,20 @@ def train(cfg: PretrainConfig):
 
         data_config.fixed_code_mode = True 
         data_config.fixed_time_mode = True 
-        data_config.fixed_time = EVAL_TIME
-        for c in EVAL_CODES:
-            data_config.fixed_code = c
-            held_out_pyd = PytorchDataset(data_config, split="held_out")
-            held_out_dataloader = torch.utils.data.DataLoader(
-                held_out_pyd,
-                batch_size=optimization_config.validation_batch_size,
-                num_workers=optimization_config.num_dataloader_workers,
-                collate_fn=held_out_pyd.collate,
-                shuffle=False,
-            )
-            LM.static_query_prefix = f"{c['name']} ({EVAL_TIME['offset']}–{EVAL_TIME['duration']+EVAL_TIME['offset']})"
-            trainer.test(model=LM, dataloaders=held_out_dataloader)
+        for t in EVAL_TIMES: 
+            data_config.fixed_time = t
+            for c in EVAL_CODES:
+                data_config.fixed_code = c
+                held_out_pyd = PytorchDataset(data_config, split="held_out")
+                held_out_dataloader = torch.utils.data.DataLoader(
+                    held_out_pyd,
+                    batch_size=optimization_config.validation_batch_size,
+                    num_workers=optimization_config.num_dataloader_workers,
+                    collate_fn=held_out_pyd.collate,
+                    shuffle=False,
+                )
+                LM.static_query_prefix = f"{c['name']} ({t['offset']}–{t['duration']+t['offset']})"
+                trainer.test(model=LM, dataloaders=held_out_dataloader)
 
         return tuning_metrics[0]["tuning/loss"], tuning_metrics, held_out_metrics
 
