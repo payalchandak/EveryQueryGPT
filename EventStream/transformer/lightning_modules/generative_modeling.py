@@ -120,8 +120,8 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         )
         self.truncated_rate_metrics = torch.nn.ModuleDict(
             {
-                "r2score": torchmetrics.R2Score(),
-                "mse": torchmetrics.MeanSquaredError(),
+                "truncated_r2score": torchmetrics.R2Score(),
+                "truncated_mse": torchmetrics.MeanSquaredError(),
             }
         )
         self.zero_metrics = torch.nn.ModuleDict(
