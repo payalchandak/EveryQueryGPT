@@ -112,126 +112,24 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
     def build_metrics(self):
         """Build the various torchmetrics we'll use to track performance."""
 
-        self.rate_regression_metrics = torch.nn.ModuleDict(
+        self.rate_metrics = torch.nn.ModuleDict(
             {
                 "r2score": torchmetrics.R2Score(),
                 "mse": torchmetrics.MeanSquaredError(),
             }
         )
-
-        self.tte_metrics = torch.nn.ModuleDict(
+        self.truncated_rate_metrics = torch.nn.ModuleDict(
             {
-                "MSE": torchmetrics.MeanSquaredError(),
-                "MSLE": torchmetrics.MeanSquaredLogError(),
-                "explained_variance": torchmetrics.ExplainedVariance(),
+                "r2score": torchmetrics.R2Score(),
+                "mse": torchmetrics.MeanSquaredError(),
+            }
+        )
+        self.zero_metrics = torch.nn.ModuleDict(
+            {
+                "auroc": torchmetrics.AUROC(task="binary"),
             }
         )
 
-        self.metrics = torch.nn.ModuleDict()
-        for task_type, measurements in self.config.measurements_per_generative_mode.items():
-            for measurement in measurements:
-                vocab_size = self.config.vocab_sizes_by_measurement[measurement]
-
-                if measurement not in self.metrics:
-                    self.metrics[measurement] = torch.nn.ModuleDict()
-                if task_type not in self.metrics[measurement]:
-                    self.metrics[measurement][task_type] = torch.nn.ModuleDict()
-
-                match task_type:
-                    case DataModality.SINGLE_LABEL_CLASSIFICATION:
-                        cat = MetricCategories.CLASSIFICATION
-                        metrics = {
-                            Metrics.ACCURACY: (
-                                MulticlassAccuracy,
-                                [Averaging.MACRO, Averaging.WEIGHTED, Averaging.MICRO],
-                            ),
-                            Metrics.AUROC: (
-                                MulticlassAUROC,
-                                [Averaging.MACRO, Averaging.WEIGHTED],
-                            ),
-                            Metrics.AUPRC: (
-                                MulticlassAveragePrecision,
-                                [Averaging.MACRO, Averaging.WEIGHTED],
-                            ),
-                        }
-                        metric_kwargs = {
-                            "num_classes": vocab_size,
-                            "ignore_index": 0,
-                            "validate_args": self.metrics_config.do_validate_args,
-                        }
-                    case DataModality.MULTI_LABEL_CLASSIFICATION:
-                        cat = MetricCategories.CLASSIFICATION
-                        metrics = {
-                            Metrics.ACCURACY: (
-                                MultilabelAccuracy,
-                                [Averaging.MACRO, Averaging.WEIGHTED, Averaging.MICRO],
-                            ),
-                            Metrics.AUROC: (
-                                MultilabelAUROC,
-                                [Averaging.MACRO, Averaging.WEIGHTED, Averaging.MICRO],
-                            ),
-                            Metrics.AUPRC: (
-                                MultilabelAveragePrecision,
-                                [Averaging.MACRO, Averaging.WEIGHTED, Averaging.MICRO],
-                            ),
-                        }
-                        metric_kwargs = {
-                            "num_labels": vocab_size,
-                            "validate_args": self.metrics_config.do_validate_args,
-                        }
-                    case DataModality.UNIVARIATE_REGRESSION:
-                        cat = MetricCategories.REGRESSION
-                        metrics = {
-                            Metrics.MSE: (torchmetrics.MeanSquaredError, [None]),
-                            Metrics.EXPLAINED_VARIANCE: (torchmetrics.ExplainedVariance, [None]),
-                        }
-                        metric_kwargs = {}
-                    case DataModality.MULTIVARIATE_REGRESSION:
-                        cat = MetricCategories.REGRESSION
-                        metrics = {
-                            Metrics.MSE: (torchmetrics.MeanSquaredError, [None]),
-                            Metrics.EXPLAINED_VARIANCE: (
-                                torchmetrics.ExplainedVariance,
-                                [Averaging.MACRO, Averaging.WEIGHTED],
-                            ),
-                        }
-                        metric_kwargs = {}
-                    case _:
-                        raise ValueError(f"Unrecognized modality {task_type}!")
-
-                auc_kwargs = {
-                    **metric_kwargs,
-                    "thresholds": self.metrics_config.n_auc_thresholds,
-                    "compute_on_cpu": True,
-                }
-                for metric, (metric_cls, averagings) in metrics.items():
-                    if metric in (Metrics.AUROC, Metrics.AUPRC):
-                        metric_cls_kwargs = {**auc_kwargs}
-                    else:
-                        metric_cls_kwargs = {**metric_kwargs}
-
-                    for averaging in averagings:
-                        if averaging is None:
-                            metric_name = str(metric)
-                            averaging_kwargs = {}
-                        else:
-                            metric_name = f"{averaging}_{metric}"
-                            if metric == Metrics.EXPLAINED_VARIANCE:
-                                if averaging == Averaging.MACRO:
-                                    avg_str = "uniform_average"
-                                elif averaging == Averaging.WEIGHTED:
-                                    avg_str = "variance_weighted"
-                                else:
-                                    raise ValueError(f"{averaging} not supported for explained variance.")
-
-                                averaging_kwargs = {"multioutput": avg_str}
-                            else:
-                                averaging_kwargs = {"average": averaging}
-
-                        if self.metrics_config.do_log_any(cat, metric_name):
-                            self.metrics[measurement][task_type][metric_name] = metric_cls(
-                                **metric_cls_kwargs, **averaging_kwargs
-                            )
 
     def log_metrics(self, results: dict, split: Split):
         """Logs metric results for a given output result.
@@ -244,16 +142,20 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
 
         log_kwargs = {"batch_size": self.optimization_config.batch_size, "sync_dist": True}
 
-        for metric_name, metric in self.rate_regression_metrics.items():
-            try: 
-                val = metric(results["rate"], results["answer"].float())
-                if self.static_query_prefix: 
-                    self.log(f"{split}/{self.static_query_prefix} {metric_name}", val, **log_kwargs)
-                else: 
-                    self.log(f"{split}/{metric_name}", val, **log_kwargs)
-            except: 
-                print(f"failed to compute {metric_name} from {results['rate']} and {results['answer'].float()}")
-            
+        for metrics, preds, target in [
+            (self.rate_metrics, results["rate"], results["answer"].float()),
+            (self.truncated_rate_metrics, results["truncated_rate"], results["truncated_answer"].float()),
+            (self.zero_metrics, results["zero_prob"], results["zero_truth"].float()),
+        ]:
+            for metric_name, metric_fn in metrics.items(): 
+                try: 
+                    val = metric_fn(preds, target)
+                    if self.static_query_prefix: 
+                        self.log(f"{split}/{self.static_query_prefix} {metric_name}", val, **log_kwargs)
+                    else: 
+                        self.log(f"{split}/{metric_name}", val, **log_kwargs)
+                except: 
+                    print(f"failed to compute {metric_name} from {preds} and {target}")
 
         if self.static_query_prefix: return 
 

@@ -90,7 +90,8 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
         proj_inputs = torch.cat([encoded_context, encoded_query], dim=1)
         
         zero_logits = self.zero_proj(proj_inputs).squeeze(dim=-1)
-        zero_loss = self.zero_objective(zero_logits, (answer == .0).float())
+        zero_truth = (answer == .0).float()
+        zero_loss = self.zero_objective(zero_logits, zero_truth)
         zero_loss = torch.mean(zero_loss)
 
         # Since we have cross entropy loss for zero rates, the minimum value for rate should be 1. 
@@ -115,7 +116,11 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
             'trucated_poisson_loss':trucated_poisson_loss, 
             'zero_loss':zero_loss, 
             'rate':rate.squeeze(),
-            'answer': answer.squeeze(),
+            'answer':answer.squeeze(),
+            'truncated_rate':torch.exp(log_rate)[mask].squeeze(), # r2score where (answer != .0)
+            'truncated_answer':answer[mask].squeeze(),
+            'zero_prob':zero_prob, # auroc with (answer == .0).float()
+            'zero_truth':zero_truth,
         }
         return out 
  
