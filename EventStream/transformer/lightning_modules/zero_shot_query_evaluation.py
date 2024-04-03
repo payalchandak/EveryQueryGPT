@@ -78,7 +78,7 @@ def train(cfg: PretrainConfig):
     trainer_kwargs = dict(
         **cfg.trainer_config,
     )
-    trainer_kwargs['devices'] = [0,1,2]
+    trainer_kwargs['devices'] = [2]
     trainer_kwargs['num_nodes'] = 1
     trainer_kwargs["logger"] = WandbLogger(entity="payal-collabs", project="EveryQueryGPT",id=WANDB_RUN_ID, resume='must')
     trainer = L.Trainer(**trainer_kwargs)
@@ -93,26 +93,42 @@ def train(cfg: PretrainConfig):
     )
 
     LM.metrics_config = cfg.final_validation_metrics_config
-    LM.build_metrics()
 
     data_config.fixed_code_mode = True 
     data_config.fixed_time_mode = True 
     for t in EVAL_TIMES: 
         data_config.fixed_time = t
-        for c in EVAL_CODES:
-            query = f"{c['name']}_{t['offset']}_{t['duration']}"
-            if sum([query in k for k in run.summary.keys()]): 
-                print(f"skipping {query}, already computed")
-                continue
-            LM.static_query_prefix = query
-            data_config.fixed_code = c
-            held_out_pyd = PytorchDataset(data_config, split="held_out")
-            held_out_dataloader = torch.utils.data.DataLoader(
-                held_out_pyd,
-                batch_size=optimization_config.validation_batch_size,
-                num_workers=optimization_config.num_dataloader_workers,
-                collate_fn=held_out_pyd.collate,
-                shuffle=False,
-            )
-            trainer.test(model=LM, dataloaders=held_out_dataloader)
+        for c in reversed(EVAL_CODES):
+            LM.build_metrics()
+            query = f"{c['name']}_{t['offset']}_{t['duration']} new"
+            # print(c)
+            # if sum([query in k for k in run.summary.keys()]): 
+            #     print(f"skipping {query}, already computed")
+            #     continue
+            if query=="Thrombus or embolism_0_365 new": 
+                print(query)
+                LM.static_query_prefix = query
+                data_config.fixed_code = c
+                held_out_pyd = PytorchDataset(data_config, split="held_out")
+                held_out_dataloader = torch.utils.data.DataLoader(
+                    held_out_pyd,
+                    batch_size=optimization_config.validation_batch_size,
+                    num_workers=optimization_config.num_dataloader_workers,
+                    collate_fn=held_out_pyd.collate,
+                    shuffle=False,
+                )
+                metrics = trainer.test(model=LM, dataloaders=held_out_dataloader)
+                results = trainer.predict(model=LM, dataloaders=held_out_dataloader)
+                results = {key: [d[key] for d in results] for key in results[0]}
+                y_prob = torch.cat(results['zero_prob'])
+                y_true = torch.cat(results['zero_truth'])
+                t_rate = torch.hstack([x for x in results['truncated_rate'] if x.nelement()])
+                t_ans = torch.hstack([x for x in results['truncated_answer'] if x.nelement()])
+                from torchmetrics.functional.classification import binary_auroc
+                from torchmetrics.classification import BinaryAUROC
+                from sklearn.metrics import roc_auc_score, r2_score
+                # print(roc_auc_score(y_true, y_prob))
+                # print(binary_auroc(y_prob, y_true.long()))
+                # print(r2_score(t_ans, t_rate))
+                ipdb.set_trace()
     return 

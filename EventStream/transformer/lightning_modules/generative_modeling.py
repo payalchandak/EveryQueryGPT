@@ -130,7 +130,7 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
             }
         )
 
-    def log_metrics(self, results: dict, split: Split):
+    def log_metrics(self, results: dict, split: Split, log_on_step:bool = True, log_on_epoch:bool = True,):
         """Logs metric results for a given output result.
 
         Args:
@@ -139,7 +139,12 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
             `split` (`str`): The split that should be used when logging metric results.
         """
 
-        log_kwargs = {"batch_size": self.optimization_config.batch_size, "sync_dist": True}
+        log_kwargs = {
+            'on_step':log_on_step,
+            'on_epoch':log_on_epoch,
+            'batch_size':self.optimization_config.batch_size,
+            'sync_dist':True,
+        }
 
         for metrics, preds, target in [
             (self.rate_metrics, results["rate"], results["answer"].float()),
@@ -171,30 +176,21 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
         return 
 
     def training_step(self, batch: PytorchBatch, batch_idx: int) -> torch.Tensor:
-        """Training step.
-
-        Skips logging all AUROC, AUPRC, and per_class metric to save compute.
-        """
         out = self.model(batch)
         self.log_metrics(out, split=Split.TRAIN)
-
         return out["loss"]
 
     def validation_step(self, batch: PytorchBatch, batch_idx: int):
-        """Validation step.
-
-        Differs from training only in that it does not skip metrics.
-        """
         out = self.model(batch)
         self.log_metrics(out, split=Split.TUNING)
 
     def test_step(self, batch: PytorchBatch, batch_idx: int):
-        """Validation step.
-
-        Differs from training only in that it does not skip metrics.
-        """
         out = self.model(batch)
-        self.log_metrics(out, split=Split.HELD_OUT)
+        self.log_metrics(out, split=Split.HELD_OUT, log_on_step=False, log_on_epoch=True)
+    
+    def predict_step(self, batch):
+        return self.model(batch)
+
 
     def configure_optimizers(self):
         """Configures optimizer and learning rate scheduler.
