@@ -145,3 +145,6 @@ docs/bin
 sample_data/processed/*
 
 outputs
+
+tmp_plots/
+
