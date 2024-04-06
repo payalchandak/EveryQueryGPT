@@ -149,3 +149,5 @@ outputs
 tmp_plots/
 tmp/
 plots/
+
+*.pkl
