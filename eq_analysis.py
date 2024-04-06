@@ -48,17 +48,32 @@ class MetricsAnalysis:
         df = df.query('code not in @self.queries_to_ignore')
         return df 
     
-    def plot_metrics_at_each_time(self, metrics=['auroc','truncated_pearson','truncated_spearman']): 
+    def plot_metrics_at_each_time(self, sort='auroc'): 
         dir = 'at_each_eval_time'
         os.makedirs(f"{self.save_path}/{dir}/", exist_ok=True)
         if self.save_to_tmp: os.makedirs(f"tmp/{dir}/", exist_ok=True)
-        cols = ['code',] + metrics
+        cols = ['code',] + list(self.metric_map.keys())
         for (offset, duration), df in self.metrics.groupby(['offset','duration']): 
-            df = df.get(cols).sort_values(by=metrics[0], ascending=False)
-            df_melted = pd.melt(df, id_vars='code', value_vars=metrics, var_name='Metric', value_name='Value')
-            df_melted['Metric'] = df_melted['Metric'].map(self.metric_map)
+            df = df.get(cols).sort_values(by=sort, ascending=False)
+            df = pd.melt(df, id_vars='code', value_vars=self.metric_map.keys(), var_name='Metric', value_name='Value')
+            for metric, x in df.groupby('Metric'): 
+                x = x.sort_values('Value')
+                plt.figure(figsize=(14, 20))
+                sns.barplot(x='Value', y='code', data=x)
+                name = f"Offset {offset}, Duration {duration}"
+                plt.title(name, fontsize=16)
+                plt.xlabel(self.metric_map[metric])
+                plt.ylabel('') 
+                plt.tick_params(axis='y', labelsize=10)
+                if metric=='auroc': plt.xlim(0, 1)
+                else: plt.xlim(-1, 1)
+                plt.tight_layout(pad=4.0)
+                if self.save_to_tmp: plt.savefig(f"tmp/{dir}/{metric} {name}.png")
+                plt.savefig(f"{self.save_path}/{dir}/{metric} {name}.png")
+                plt.close()
+            df['Metric'] = df['Metric'].map(self.metric_map)
             plt.figure(figsize=(14, 20))
-            combined_plot = sns.barplot(x='Value', y='code', hue='Metric', data=df_melted, palette=['skyblue', 'lightcoral','lightgreen'])
+            combined_plot = sns.barplot(x='Value', y='code', hue='Metric', data=df, palette=['skyblue', 'lightcoral','lightgreen'])
             name = f"Offset {offset}, Duration {duration}"
             combined_plot.set_title(name, fontsize=16)
             combined_plot.set_xlabel('')
@@ -66,8 +81,9 @@ class MetricsAnalysis:
             combined_plot.tick_params(axis='y', labelsize=10)
             combined_plot.set_xlim(-1, 1)
             plt.tight_layout(pad=4.0)
-            if self.save_to_tmp: plt.savefig(f"tmp/{dir}/{name}.png")
-            plt.savefig(f"{self.save_path}/{dir}/{name}.png")
+            if self.save_to_tmp: plt.savefig(f"tmp/{dir}/combined {name}.png")
+            plt.savefig(f"{self.save_path}/{dir}/combined {name}.png")
+            plt.close()
 
     def plot_metric_v_metric(
             self, 
