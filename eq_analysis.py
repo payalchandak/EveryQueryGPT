@@ -76,15 +76,19 @@ class MetricsAnalysis:
             y_metric='truncated_pearson', 
             individual_codes=True
         ): 
-        if keep_const=='offset': df = self.metrics.query('offset==0')
-        elif keep_const=='duration': df = self.metrics.query('duration==30')
+        if keep_const=='offset': 
+            df = self.metrics.query('offset==0')
+            vary = 'duration'
+        elif keep_const=='duration': 
+            df = self.metrics.query('duration==30')
+            vary = 'offset'
         else: raise ValueError('invalid keep_const, pick offset or duration')
-        dir = f'keep_{keep_const}_constant'
+        dir = f'vary_{vary}/{x_metric}_v_{y_metric}'
         os.makedirs(f"{self.save_path}/{dir}/", exist_ok=True)
         if self.save_to_tmp: os.makedirs(f"tmp/{dir}/", exist_ok=True)
         plt.figure(figsize=(10, 6))
-        sc = plt.scatter(df[x_metric], df[y_metric], c=df[keep_const], marker='x', alpha=0.5, cmap='cool')
-        plt.colorbar(sc, label=keep_const)
+        sc = plt.scatter(df[x_metric], df[y_metric], c=df[vary], marker='x', alpha=0.5, cmap='cool')
+        plt.colorbar(sc, label=vary)
         plt.xlabel(self.metric_map[x_metric])
         plt.ylabel(self.metric_map[y_metric])
         if x_metric=="auroc": plt.xlim(0, 1)
@@ -96,10 +100,13 @@ class MetricsAnalysis:
         plt.savefig(f"{self.save_path}/{dir}/all_codes.png")
         plt.close()
         if individual_codes: 
+            dir = dir+'/individual_codes'
+            os.makedirs(f"{self.save_path}/{dir}/", exist_ok=True)
+            if self.save_to_tmp: os.makedirs(f"tmp/{dir}/", exist_ok=True)
             for code, df_code in df.groupby('code'): 
                 plt.figure(figsize=(10, 6))
-                sc = plt.scatter(df_code[x_metric], df_code[y_metric], c=df_code[keep_const], marker='x', cmap='cool')
-                plt.colorbar(sc, label=keep_const)
+                sc = plt.scatter(df_code[x_metric], df_code[y_metric], c=df_code[vary], marker='x', cmap='cool')
+                plt.colorbar(sc, label=vary)
                 plt.title(code)
                 plt.xlabel(self.metric_map[x_metric])
                 plt.ylabel(self.metric_map[y_metric])
@@ -108,9 +115,31 @@ class MetricsAnalysis:
                 plt.savefig(f"{self.save_path}/{dir}/{code}.png")
                 plt.close()
 
+    def boxplot_metric_variation(self):
+        for keep_const in ['offset', 'duration']: 
+            if keep_const=='offset': 
+                df = self.metrics.query('offset==0')
+                vary = 'duration'
+            elif keep_const=='duration': 
+                df = self.metrics.query('duration==30')
+                vary = 'offset'
+            dir = f'vary_{vary}/metric_variation/'
+            os.makedirs(f"{self.save_path}/{dir}/", exist_ok=True)
+            if self.save_to_tmp: os.makedirs(f"tmp/{dir}/", exist_ok=True)
+            for metric, metric_name in self.metric_map.items(): 
+                plt.figure(figsize=(10,10))
+                sns.boxplot(data=df, x=metric, y='code')
+                plt.title(f'{metric_name} across different {vary}s')
+                plt.tick_params(axis='y', labelsize=10)
+                plt.tight_layout(pad=4.0)
+                plt.grid(True)
+                if self.save_to_tmp: plt.savefig(f"tmp/{dir}/{metric}.png")
+                plt.savefig(f"{self.save_path}/{dir}/{metric}.png")
+                plt.close()
 
 m = MetricsAnalysis(wandb_run_id="487l51nc")
 m.plot_metrics_at_each_time()
+m.boxplot_metric_variation()
 m.plot_metric_v_metric(
     keep_const='offset', 
     x_metric='auroc', 
