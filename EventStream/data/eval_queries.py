@@ -179,32 +179,4 @@ EVAL_CODES = [
         'name': 'Syncope and collapse',
         'code':'Syncope and collapse',
     },
-    {
-        'name': 'Endometriosis',
-        'code':'Endometriosis of ovary',
-    },
-    {
-        'name': 'Pregnancy',
-        'code':'Pregnancy examination or test, positive result',
-    },
-    {
-        'name': 'Diabetes in pregnancy',
-        'code':'Diabetes mellitus of mother, complicating pregnancy, childbirth, or the puerperium, unspecified as to episode of care',
-    },
-    {
-        'name': 'Prostate cancer',
-        'code':'Malignant neoplasm of prostate',
-    },
-    {
-        'name': 'Androgenic alopecia',
-        'code':'Androgenic alopecia, unspecified',
-    },
-    {
-        'name': 'Senile osteoporosis',
-        'code':'Senile osteoporosis',
-    },
-    {
-        'name': 'Senile dementia',
-        'code':'Senile dementia with delirium',
-    },
 ]

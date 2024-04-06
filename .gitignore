@@ -147,4 +147,5 @@ sample_data/processed/*
 outputs
 
 tmp_plots/
-
+tmp/
+plots/
