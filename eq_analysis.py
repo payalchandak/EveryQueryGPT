@@ -131,6 +131,41 @@ class MetricsAnalysis:
                 plt.savefig(f"{self.save_path}/{dir}/{code}.png")
                 plt.close()
 
+    def plot_metric_v_time(
+            self, 
+            metric='auroc', 
+            time='duration', 
+            individual_codes=True
+        ): 
+        df = self.metrics
+        dir = f'{metric}_v_{time}'
+        os.makedirs(f"{self.save_path}/{dir}/", exist_ok=True)
+        if self.save_to_tmp: os.makedirs(f"tmp/{dir}/", exist_ok=True)
+        plt.figure(figsize=(10, 6))
+        sc = plt.scatter(df[metric], df[time], marker='x', alpha=0.8)
+        plt.xlabel(self.metric_map[metric])
+        plt.ylabel(time.title())
+        if metric=="auroc": plt.xlim(0, 1)
+        else: plt.xlim(-1, 1)
+        plt.grid(True)
+        if self.save_to_tmp: plt.savefig(f"tmp/{dir}/all_codes.png")
+        plt.savefig(f"{self.save_path}/{dir}/all_codes.png")
+        plt.close()
+        if individual_codes: 
+            dir = dir+'/individual_codes'
+            os.makedirs(f"{self.save_path}/{dir}/", exist_ok=True)
+            if self.save_to_tmp: os.makedirs(f"tmp/{dir}/", exist_ok=True)
+            for code, df_code in df.groupby('code'): 
+                plt.figure(figsize=(10, 6))
+                sc = plt.scatter(df_code[metric], df_code[time], marker='x')
+                plt.title(code)
+                plt.xlabel(self.metric_map[metric])
+                plt.ylabel(time.title())
+                plt.grid(True)
+                if self.save_to_tmp: plt.savefig(f"tmp/{dir}/{code}.png")
+                plt.savefig(f"{self.save_path}/{dir}/{code}.png")
+                plt.close()
+
     def boxplot_metric_variation(self):
         for keep_const in ['offset', 'duration']: 
             if keep_const=='offset': 
@@ -154,6 +189,11 @@ class MetricsAnalysis:
                 plt.close()
 
 m = MetricsAnalysis(wandb_run_id="487l51nc")
+m.plot_metric_v_time(
+    metric='auroc',
+    time='duration',
+    individual_codes=True
+)
 m.plot_metrics_at_each_time()
 m.boxplot_metric_variation()
 m.plot_metric_v_metric(
