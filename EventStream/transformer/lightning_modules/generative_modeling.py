@@ -177,12 +177,12 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
 
     def training_step(self, batch: PytorchBatch, batch_idx: int) -> torch.Tensor:
         out = self.model(batch)
-        self.log_metrics(out, split=Split.TRAIN)
+        self.log_metrics(out, split=Split.TRAIN, log_on_step=True, log_on_epoch=False)
         return out["loss"]
 
     def validation_step(self, batch: PytorchBatch, batch_idx: int):
         out = self.model(batch)
-        self.log_metrics(out, split=Split.TUNING)
+        self.log_metrics(out, split=Split.TUNING, log_on_step=False, log_on_epoch=True)
 
     def test_step(self, batch: PytorchBatch, batch_idx: int):
         out = self.model(batch)
