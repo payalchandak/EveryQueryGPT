@@ -174,14 +174,8 @@ class MetricsAnalysis:
                 plt.close()
 
 m = MetricsAnalysis(wandb_run_id="487l51nc")
-m.boxplot_metric_v_time(
-    metric='auroc',
-    time='duration',
-)
-m.boxplot_metric_v_time(
-    metric='auroc',
-    time='offset',
-)
+m.boxplot_metric_v_time(metric='auroc',time='duration',)
+m.boxplot_metric_v_time(metric='auroc',time='offset',)
 m.barplot_metrics_at_each_time()
 m.boxplot_metric_variation()
 m.scatterplot_metric_v_metric(

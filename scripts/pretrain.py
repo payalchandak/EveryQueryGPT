@@ -39,7 +39,7 @@ def main(cfg: PretrainConfig):
         cfg_dict = copy.deepcopy(cfg)
         cfg_dict.config = cfg_dict.config.to_dict()
         OmegaConf.save(cfg_dict, cfg_fp)
-
+        
     return train(cfg)
 
 

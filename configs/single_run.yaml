@@ -16,7 +16,7 @@ config:
   numerical_embedding_weight: 0.5
   do_normalize_by_measurement_index: false
   structured_event_processing_mode: conditionally_independent
-  num_hidden_layers: 8
+  num_hidden_layers: 10
   seq_attention_types:
   - global
   head_dim: 64
@@ -60,7 +60,7 @@ data_config:
   population_rates:
 trainer_config:
   accelerator: auto
-  devices: [2] #auto
+  devices: [0] #auto
   detect_anomaly: False
   log_every_n_steps: 10
   strategy: auto 
@@ -69,7 +69,7 @@ trainer_config:
   fast_dev_run: False 
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
-  name: batch-size-256
+  name: 10-hidden-layers
   entity: payal-collabs
   project: EveryQueryGPT
   team: null

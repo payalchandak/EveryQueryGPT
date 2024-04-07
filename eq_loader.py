@@ -30,8 +30,7 @@ TASK_NAME = "readmission_30d_all"
 PROJECT_DIR = Path(os.environ["PROJECT_DIR"])
 dataset_dir = f"/storage/shared/mgh-hf-dataset/processed/{COHORT_NAME}" # PROJECT_DIR / "data" / COHORT_NAME
 
-for q in EVAL_CODES: 
-    pyd_config = PytorchDatasetConfig(
+pyd_config = PytorchDatasetConfig(
     save_dir=dataset_dir,
     max_seq_len=256,
     train_subset_size=0.001,
@@ -42,20 +41,7 @@ for q in EVAL_CODES:
     fixed_time_mode=True, 
     fixed_time={'duration':365, 'offset':0}
 )
-    code = pyd_config.sample_code()
-    if code['has_value']:
-        print(f"{q['name']} with range {(q['range_min'], q['range_max'])}")
-    else: 
-        print(f"{q['name']}")
-    print(f"observation freq ~ {code['obs_freq']:.0e}\n")
-    break 
-
-# add fixed time mode in addition to static query mode
-
-# codes = pyd_config._all_query_codes
-# diagnoses = [c for c in codes if c['type']=='diagnosis_name']
-# print(set([c['name'] for c in diagnoses if 'Androgenic alopecia' in c['name']]))
-
+    
 pyd = PytorchDataset(
     config=pyd_config, 
     split='train'
@@ -65,20 +51,6 @@ pyd = PytorchDataset(
 # pr = pyd._build_population_rates()
 
 pyd_config.set_to_dataset(pyd)
-
-print(pyd_config.sample_code())
-
-# print(pyd[0])
-
-# do in post init if time-specific query is defined 
-# counter = 0
-# for datapoint in pyd: 
-#     inputs, query, answer, flag = datapoint 
-#     counter += flag
-# valid_frac = counter/len(pyd)
-# print(valid_frac)
-
-# have a setting in pyd_config to control whether to filter [depends on if you mention speciifc time in your query]
 
 # dataloader = torch.utils.data.DataLoader(
 #     pyd,
