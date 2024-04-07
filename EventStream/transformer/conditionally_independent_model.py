@@ -77,6 +77,12 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
         result = torch.where(x > threshold, large_x_approximation, small_x_approximation)
         return result
 
+    def sample_zero_truncated_poisson(self, log_rate):
+        rate = torch.exp(log_rate).squeeze()
+        u = torch.distributions.uniform.Uniform(low=torch.exp(-rate), high=1).sample()
+        t = -torch.log(u)
+        return 1 + torch.distributions.poisson.Poisson(rate = rate-t).sample()
+
     def forward(
         self,
         encoded_context: torch.FloatTensor,
@@ -91,8 +97,7 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
         
         zero_logits = self.zero_proj(proj_inputs).squeeze(dim=-1)
         zero_truth = (answer == .0).float()
-        zero_loss = self.zero_objective(zero_logits, zero_truth)
-        zero_loss = torch.mean(zero_loss)
+        zero_loss = self.zero_objective(zero_logits, zero_truth).mean()
 
         # Since we have cross entropy loss for zero rates, the minimum value for rate should be 1. 
         # This means the minimum value for log_rate is 0, and thus we can put it through a ReLU. 
@@ -104,22 +109,23 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
             trucated_poisson_loss = - (answer[mask] * log_rate[mask]) + self.stable_log_exp_minus_one_exp(log_rate[mask])
             trucated_poisson_loss = torch.mean(trucated_poisson_loss)
         else:
-            trucated_poisson_loss = 0 
+            trucated_poisson_loss = torch.zeros_like(zero_loss)
 
         loss = zero_loss + trucated_poisson_loss
 
-        zero_prob = torch.sigmoid(zero_logits)
-        rate = torch.where(zero_prob >= 0.5, torch.zeros_like(zero_prob), torch.exp(log_rate).squeeze())
-        
+        zero_sample = torch.distributions.bernoulli.Bernoulli(logits=zero_logits).sample()
+        rate_sample = self.sample_zero_truncated_poisson(log_rate) 
+        rate = torch.where(zero_sample.bool(), torch.zeros_like(zero_sample), rate_sample)
+
         out = {
             'loss':loss, 
             'trucated_poisson_loss':trucated_poisson_loss, 
             'zero_loss':zero_loss, 
             'rate':rate.squeeze(),
             'answer':answer.squeeze(),
-            'truncated_rate':torch.exp(log_rate)[mask].squeeze(), # r2score where (answer != .0)
+            'truncated_rate':torch.exp(log_rate)[mask].squeeze(), # corrcoef where (answer != .0)
             'truncated_answer':answer[mask].squeeze(),
-            'zero_prob':zero_prob, # auroc with (answer == .0).float()
+            'zero_prob':torch.sigmoid(zero_logits), 
             'zero_truth':zero_truth,
         }
         return out 
