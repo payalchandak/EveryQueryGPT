@@ -49,7 +49,7 @@ from EventStream.transformer.lightning_modules.generative_modeling import (
 import ipdb
 
 @task_wrapper
-def dump_preditions(cfg: PretrainConfig, WANDB_RUN_ID:str):
+def dump_preditions(cfg: PretrainConfig, WANDB_RUN_ID:str, device:int=0):
     api = wandb.Api()
     run = api.run(f"payal-collabs/EveryQueryGPT/{WANDB_RUN_ID}")
     pretrained_weights_fp = f"{run.config['save_dir']}/pretrained_weights"
@@ -80,7 +80,7 @@ def dump_preditions(cfg: PretrainConfig, WANDB_RUN_ID:str):
     trainer_kwargs = dict(
         **cfg.trainer_config,
     )
-    trainer_kwargs['devices'] = [2]
+    trainer_kwargs['devices'] = [device]
     trainer_kwargs['num_nodes'] = 1
     trainer_kwargs["logger"] = WandbLogger(entity="payal-collabs", project="EveryQueryGPT",id=WANDB_RUN_ID, resume='must')
     trainer = L.Trainer(**trainer_kwargs)
