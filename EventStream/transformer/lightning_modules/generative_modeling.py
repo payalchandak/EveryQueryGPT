@@ -116,12 +116,16 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
             {
                 "r2score": torchmetrics.R2Score(),
                 "mse": torchmetrics.MeanSquaredError(),
+                "pearson": torchmetrics.PearsonCorrCoef(),
+                "spearman": torchmetrics.SpearmanCorrCoef(),
             }
         )
         self.truncated_rate_metrics = torch.nn.ModuleDict(
             {
                 "truncated_r2score": torchmetrics.R2Score(),
                 "truncated_mse": torchmetrics.MeanSquaredError(),
+                "truncated_pearson": torchmetrics.PearsonCorrCoef(),
+                "truncated_spearman": torchmetrics.SpearmanCorrCoef(),
             }
         )
         self.zero_metrics = torch.nn.ModuleDict(
@@ -190,7 +194,6 @@ class ESTForGenerativeSequenceModelingLM(L.LightningModule):
     
     def predict_step(self, batch):
         return self.model(batch)
-
 
     def configure_optimizers(self):
         """Configures optimizer and learning rate scheduler.
@@ -367,7 +370,7 @@ def train(cfg: PretrainConfig):
     callbacks = [
         LearningRateMonitor(logging_interval="step"),
         # MonitorInputCallback(),
-        AnomalyDetectionCallback(action='zero', print_batch_on_anomaly=True, checkpoint_on_anomaly=False),
+        # AnomalyDetectionCallback(action='zero', print_batch_on_anomaly=True, checkpoint_on_anomaly=False),
     ]
     if optimization_config.patience is not None:
         callbacks.append(
