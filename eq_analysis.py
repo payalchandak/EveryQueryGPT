@@ -41,6 +41,9 @@ class MetricsAnalysis:
             data['truncated_mse'] = mean_squared_error(results['truncated_rate'], results['truncated_answer']).item()
             data['truncated_pearson'] = pearson_corrcoef(results['truncated_rate'], results['truncated_answer'].float()).item()
             data['truncated_spearman'] = spearman_corrcoef(results['truncated_rate'], results['truncated_answer'].float()).item()
+            data['mse'] = mean_squared_error(results['rate'], results['answer']).item()
+            data['pearson'] = pearson_corrcoef(results['rate'], results['answer'].float()).item()
+            data['spearman'] = spearman_corrcoef(results['rate'], results['answer'].float()).item()
             df.append(data)
         df = pd.DataFrame(df)
         df['duration'] = df['duration'].astype(int)
@@ -173,20 +176,17 @@ class MetricsAnalysis:
                 plt.savefig(f"{self.save_path}/{dir}/{metric}.png")
                 plt.close()
 
-m = MetricsAnalysis(wandb_run_id="487l51nc")
-m.boxplot_metric_v_time(metric='auroc',time='duration',)
-m.boxplot_metric_v_time(metric='auroc',time='offset',)
-m.barplot_metrics_at_each_time()
-m.boxplot_metric_variation()
-m.scatterplot_metric_v_metric(
-    keep_const='offset', 
-    x_metric='auroc', 
-    y_metric='truncated_pearson', 
-    individual_codes=True
-)
-m.scatterplot_metric_v_metric(
-    keep_const='duration', 
-    x_metric='auroc', 
-    y_metric='truncated_pearson', 
-    individual_codes=True
-)
+'''
+population rate 487l51nc
+static query hypertension 4ck0f8ok
+random answer zq74qtv5
+random prediction nn9poa1x
+'''
+m = MetricsAnalysis(wandb_run_id="nn9poa1x") 
+print(m.metrics.get(['query','auroc','pearson','spearman']).sort_values('auroc'))
+# m.boxplot_metric_v_time(metric='auroc',time='duration',)
+# m.boxplot_metric_v_time(metric='auroc',time='offset',)
+# m.barplot_metrics_at_each_time()
+# m.boxplot_metric_variation()
+# m.scatterplot_metric_v_metric(keep_const='offset', x_metric='auroc', y_metric='truncated_pearson', individual_codes=True)
+# m.scatterplot_metric_v_metric(keep_const='duration', x_metric='auroc', y_metric='truncated_pearson', individual_codes=True)
