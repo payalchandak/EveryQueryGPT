@@ -113,8 +113,11 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
 
         loss = zero_loss + trucated_poisson_loss
 
-        zero_sample = torch.distributions.bernoulli.Bernoulli(logits=zero_logits).sample()
-        rate_sample = self.sample_zero_truncated_poisson(log_rate) 
+        random_zero_logits = torch.zeros_like(zero_logits) + 0.4055 # zero prob is always 0.6
+        random_log_rate = (torch.rand(log_rate.size()) * 4).to(log_rate.device) # rate is randomly sampled 
+
+        zero_sample = torch.distributions.bernoulli.Bernoulli(logits=random_zero_logits).sample()
+        rate_sample = self.sample_zero_truncated_poisson(random_log_rate) 
         rate = torch.where(zero_sample.bool(), torch.zeros_like(zero_sample), rate_sample)
 
         out = {
@@ -123,9 +126,9 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
             'zero_loss':zero_loss, 
             'rate':rate.squeeze(),
             'answer':answer.squeeze(),
-            'truncated_rate':torch.exp(log_rate)[mask].squeeze(), # corrcoef where (answer != .0)
+            'truncated_rate':torch.exp(random_log_rate)[mask].squeeze(), # corrcoef where (answer != .0)
             'truncated_answer':answer[mask].squeeze(),
-            'zero_prob':torch.sigmoid(zero_logits), 
+            'zero_prob':torch.sigmoid(random_zero_logits), 
             'zero_truth':zero_truth,
         }
         return out 
