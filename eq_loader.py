@@ -36,8 +36,8 @@ pyd_config = PytorchDatasetConfig(
     train_subset_size=0.001,
     train_subset_seed=79163,
     do_include_start_time_min=True,
-    fixed_code_mode=True,
-    fixed_code=q,
+    fixed_code_mode=False,
+    # fixed_code=q,
     fixed_time_mode=True, 
     fixed_time={'duration':365, 'offset':0}
 )
@@ -47,10 +47,29 @@ pyd = PytorchDataset(
     split='train'
 )
 
+pyd_config.set_to_dataset(pyd)
+
+i = 0
+for x in pyd:
+    i+=1 
+    print(x['query']['code_name'])
+    if i>1000: break
+
+'''
+Genetic counseling
+Persistent vomiting
+Bitten by dog, subsequent encounter
+Blood typing; ABO
+Ehlers-Danlos syndrome
+Lupus anticoagulant syndrome
+Screening for malignant neoplasms of colon
+Burn (any degree) involving 20-29 percent of body surface with third degree burn of 20-29%
+Flat foot
+'''
+
 # print(pyd.frac_future_is_observed)
 # pr = pyd._build_population_rates()
 
-pyd_config.set_to_dataset(pyd)
 
 # dataloader = torch.utils.data.DataLoader(
 #     pyd,

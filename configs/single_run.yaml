@@ -31,14 +31,14 @@ optimization_config:
   end_lr_frac_of_init_lr: 0.1
   end_lr: null
   max_epochs: 100
-  batch_size: 256
+  batch_size: 128 # 512
   validation_batch_size: 256
   lr_frac_warmup_steps: 0.05
   lr_decay_power: 1
   weight_decay: 0.1
-  patience: 5
+  patience: 50
   gradient_accumulation: null
-  num_dataloader_workers: 15
+  num_dataloader_workers: 2
 data_config:
   save_dir: /storage/shared/mgh-hf-dataset/processed/ESD_09-01-23-1/
   max_seq_len: 128
@@ -53,23 +53,21 @@ data_config:
   max_duration_days: 365
   min_offset_days: 0
   max_offset_days: 365
-  fixed_code_mode: False 
-  fixed_code: 
-  fixed_time_mode: False 
-  fixed_time: 
+  fixed_code_mode: True 
+  fixed_code: {"name": "Hypertension", "code": "Essential (primary) hypertension"}
+  fixed_time_mode: True 
+  fixed_time: {"offset": 0, "duration": 30}
   population_rates:
 trainer_config:
   accelerator: auto
-  devices: [0] #auto
+  devices: auto
   detect_anomaly: False
   log_every_n_steps: 10
   strategy: auto 
-  # gradient_clip_val: 10
-  # gradient_clip_algorithm: 'value'
   fast_dev_run: False 
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
-  name: 10-hidden-layers
+  name: multigpu
   entity: payal-collabs
   project: EveryQueryGPT
   team: null
