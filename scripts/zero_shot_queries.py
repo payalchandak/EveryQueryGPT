@@ -27,16 +27,11 @@ torch.set_float32_matmul_precision("high")
 
 @hydra.main(version_base=None, config_name="pretrain_config")
 def main(cfg: PretrainConfig):
-    WANDB_RUN_ID="nn9poa1x"
-    # api = wandb.Api()
-    # run = api.run(f"payal-collabs/EveryQueryGPT/{WANDB_RUN_ID}")
-    # for k in run.config.keys(): 
-    #     cfg[k] = run.config[k]
-    # need to sort out updating cfg from keys in wandb logs... 
+    WANDB_RUN_ID="vhjwx9p8"
     hydra_loguru_init()
     if type(cfg) is not PretrainConfig:
         cfg = hydra.utils.instantiate(cfg, _convert_="object")
-    return dump_preditions(cfg, WANDB_RUN_ID=WANDB_RUN_ID, device=1)
+    return dump_preditions(cfg, WANDB_RUN_ID=WANDB_RUN_ID, device=2)
 
 if __name__ == "__main__":
     main()

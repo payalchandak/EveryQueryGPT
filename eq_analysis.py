@@ -32,6 +32,7 @@ class MetricsAnalysis:
             data['code'], data['offset'], data['duration'] = data['query'].split('_')
             with open(self.read_path+filename,'rb') as file: 
                 results = pickle.load(file)
+                if results == []: continue 
                 results = {k:results[k] for k in results if 'loss' not in k} 
             if torch.sum(torch.cat(results['answer']))==0: 
                 if verbose: print(f"Skipping {data['query']}, query event never occurs in dataset")
@@ -179,10 +180,10 @@ class MetricsAnalysis:
 '''
 population rate 487l51nc
 static query hypertension 4ck0f8ok
-random answer zq74qtv5
-random prediction nn9poa1x
+longer static hypertension vhjwx9p8
 '''
-m = MetricsAnalysis(wandb_run_id="nn9poa1x") 
+m = MetricsAnalysis(wandb_run_id="vhjwx9p8", verbose=True) 
+print(m.read_path)
 print(m.metrics.get(['query','auroc','pearson','spearman']).sort_values('auroc'))
 # m.boxplot_metric_v_time(metric='auroc',time='duration',)
 # m.boxplot_metric_v_time(metric='auroc',time='offset',)

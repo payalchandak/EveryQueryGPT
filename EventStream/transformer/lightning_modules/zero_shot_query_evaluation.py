@@ -55,7 +55,6 @@ def dump_preditions(cfg: PretrainConfig, WANDB_RUN_ID:str, device:int=0):
     pretrained_weights_fp = f"{run.config['save_dir']}/pretrained_weights"
     results_dir = run.config['save_dir']+'/specific_query_predictions/'
     os.makedirs(results_dir, exist_ok=True)
-    completed_queries = os.listdir(results_dir)
 
     L.seed_everything(cfg.seed)
     if cfg.do_use_filesystem_sharing:
@@ -92,24 +91,35 @@ def dump_preditions(cfg: PretrainConfig, WANDB_RUN_ID:str, device:int=0):
         for c in EVAL_CODES:
             LM.build_metrics()
             query = f"{c['name']}_{t['offset']}_{t['duration']}"
-            if query+'.pkl' in completed_queries: 
+            filename = f"{results_dir}/{query}.pkl"
+            if os.path.exists(filename): 
                 print(f"skipping {query}, already computed")
                 continue
-            LM.static_query_prefix = query
-            data_config.fixed_code = c
-            held_out_pyd = PytorchDataset(data_config, split="held_out")
-            held_out_dataloader = torch.utils.data.DataLoader(
-                held_out_pyd,
-                batch_size=optimization_config.validation_batch_size,
-                num_workers=optimization_config.num_dataloader_workers,
-                collate_fn=held_out_pyd.collate,
-                shuffle=False,
-            )
-            results = trainer.predict(model=LM, dataloaders=held_out_dataloader)
-            results = {key: [d[key] for d in results] for key in results[0]}
-            with open(f"{results_dir}/{query}.pkl", "wb") as f: 
-                pickle.dump(results, f)
-                print(f"Wrote {query}")
+            with open(filename, "wb") as f: 
+                pickle.dump([], f)
+                print(f"Wrote empty {query}")
+            try:
+                LM.static_query_prefix = query
+                data_config.fixed_code = c
+                held_out_pyd = PytorchDataset(data_config, split="held_out")
+                held_out_dataloader = torch.utils.data.DataLoader(
+                    held_out_pyd,
+                    batch_size=optimization_config.validation_batch_size,
+                    num_workers=optimization_config.num_dataloader_workers,
+                    collate_fn=held_out_pyd.collate,
+                    shuffle=False,
+                )
+                results = trainer.predict(model=LM, dataloaders=held_out_dataloader)
+                results = {key: [d[key] for d in results] for key in results[0]}
+                with open(filename, "wb") as f: 
+                    pickle.dump(results, f)
+                    print(f"Wrote {query}")
+            except:
+                if os.path.exists(filename): 
+                    os.remove(filename)
+                    print(f"Failed - deleted {query}")
+                sys.exit(0)
+
     return 
 
 @task_wrapper
