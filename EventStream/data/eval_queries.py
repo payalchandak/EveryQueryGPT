@@ -1,8 +1,8 @@
 EVAL_TIMES = [
+    {'offset':0, 'duration':30},
     {'offset':0, 'duration':365},
     {'offset':0, 'duration':180},
     {'offset':0, 'duration':90},
-    {'offset':0, 'duration':30},
     {'offset':0, 'duration':7},
     {'offset':7, 'duration':30},
     {'offset':30, 'duration':30},
@@ -10,7 +10,41 @@ EVAL_TIMES = [
     {'offset':180, 'duration':30},
     {'offset':365, 'duration':30},
 ]
+OTHER_CODES = [
+    {
+        'name':'Genetic counseling',
+        'code':'Genetic counseling',
+    },
+    {
+        'name':'Persistent vomiting',
+        'code':'Persistent vomiting',
+    },
+    {
+        'name':'Blood typing; ABO',
+        'code':'Blood typing; ABO',
+    },
+    {
+        'name':'Ehlers-Danlos syndrome',
+        'code':'Ehlers-Danlos syndrome',
+    },
+    {
+        'name':'Colon cancer screening',
+        'code':'Screening for malignant neoplasms of colon',
+    },
+    {
+        'name':'Third degree burn',
+        'code':'Burn (any degree) involving 20-29 percent of body surface with third degree burn of 20-29%',
+    },
+    {
+        'name':'Flat foot',
+        'code':'Flat foot',
+    },
+]
 EVAL_CODES = [
+    {
+        'name': 'Hypertension',
+        'code':'Essential (primary) hypertension',
+    },
     {
         'name': 'High NT-proBNP',
         'code':'N-terminal pro-brain natriuretic peptide',
@@ -126,10 +160,6 @@ EVAL_CODES = [
     {
         'name': 'Cardiogenic shock',
         'code':'Cardiogenic shock',
-    },
-    {
-        'name': 'Hypertension',
-        'code':'Essential (primary) hypertension',
     },
     {
         'name': 'Sepsis after procedure',
