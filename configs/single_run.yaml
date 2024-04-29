@@ -53,10 +53,10 @@ data_config:
   max_duration_days: 365
   min_offset_days: 0
   max_offset_days: 365
-  fixed_code_mode: True 
-  fixed_code: {"name": "Hypertension", "code": "Essential (primary) hypertension"}
-  fixed_time_mode: True 
-  fixed_time: {"offset": 0, "duration": 30}
+  fixed_code_mode: False 
+  fixed_code: 
+  fixed_time_mode: False 
+  fixed_time: 
   population_rates:
 trainer_config:
   accelerator: auto
@@ -67,7 +67,7 @@ trainer_config:
   fast_dev_run: False 
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
-  name: multigpu
+  name: answer-in-query
   entity: payal-collabs
   project: EveryQueryGPT
   team: null
