@@ -67,7 +67,7 @@ trainer_config:
   fast_dev_run: False 
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
-  name: answer-in-query
+  name: answer-in-query-embed
   entity: payal-collabs
   project: EveryQueryGPT
   team: null

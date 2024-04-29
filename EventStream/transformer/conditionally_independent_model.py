@@ -222,5 +222,6 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
         encoded_context = self.safe_max_seq_dim(encoded_context.last_hidden_state, context.event_mask)
         query_embed = self.query_embedding_layer(query, **kwargs) 
         encoded_query = query_embed # (todo) self.query_encoder(query_embed, **kwargs)
+        encoded_query[:,-1] = query['answer']
         output = self.output_layer(encoded_context, encoded_query, answer, query['population_rate'])
         return output
