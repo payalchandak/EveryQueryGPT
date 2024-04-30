@@ -31,7 +31,7 @@ optimization_config:
   end_lr_frac_of_init_lr: 0.1
   end_lr: null
   max_epochs: 100
-  batch_size: 128 # 512
+  batch_size: 512
   validation_batch_size: 256
   lr_frac_warmup_steps: 0.05
   lr_decay_power: 1
@@ -67,7 +67,7 @@ trainer_config:
   fast_dev_run: False 
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
-  name: answer-in-query-embed
+  name: answer-is-query-embed
   entity: payal-collabs
   project: EveryQueryGPT
   team: null

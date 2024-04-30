@@ -656,9 +656,8 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
                         if x is None: continue # todo: check sometimes None –– outlier detector?  
                         if (x>=code['range_min']) and (x<=code['range_max']): 
                             answer += 1
-                    else: 
-                        answer += 1
-                    
+                    else: answer += 1
+        
         for k in (
                     "time_delta",
                     "dynamic_indices",
@@ -677,7 +676,6 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             'range_min': code['range_min'], 
             'range_max': code['range_max'], 
             'population_rate': code['population_rate'],
-            'answer':answer,
         } 
 
         item = {
@@ -887,7 +885,6 @@ class PytorchDataset(SaveableMixin, SeedableMixin, TimeableMixin, torch.utils.da
             '_code_type': torch.tensor([1.0 for q in queries], dtype=torch.float),
             '_cat_mask':torch.tensor([True for q in queries], dtype=torch.bool),
             'population_rate': torch.tensor([q['population_rate'] for q in queries], dtype=torch.float),
-            'answer':torch.tensor([q['answer'] for q in queries], dtype=torch.float),
         }
 
         answers = [dct['answer'] for dct in batch]
