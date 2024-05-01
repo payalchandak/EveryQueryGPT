@@ -410,6 +410,7 @@ def train(cfg: PretrainConfig):
         trainer_kwargs["accumulate_grad_batches"] = optimization_config.gradient_accumulation
 
     # Fitting model
+    trainer_kwargs['strategy'] = 'ddp_find_unused_parameters_true'
     trainer = L.Trainer(**trainer_kwargs)
     trainer.fit(model=LM, train_dataloaders=train_dataloader, val_dataloaders=tuning_dataloader)
 

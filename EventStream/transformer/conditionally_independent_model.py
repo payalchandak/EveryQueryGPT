@@ -64,8 +64,8 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
         config: StructuredTransformerConfig,
     ):
         super().__init__()
-        self.rate_proj = torch.nn.Linear(config.hidden_size*2, 1)
-        self.zero_proj = torch.nn.Linear(config.hidden_size * 2, 1) 
+        self.rate_proj = torch.nn.Linear(config.hidden_size*2+1, 1)
+        self.zero_proj = torch.nn.Linear(config.hidden_size*2+1, 1) 
         self.zero_objective = torch.nn.BCEWithLogitsLoss()
     
     def stable_log_exp_minus_one_exp(self, x):
@@ -93,10 +93,11 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
         
         assert encoded_context.shape == encoded_query.shape, f"encoded_context {encoded_context.shape} and encoded_query {encoded_query.shape} should be (batch_size, hidden_size)"
         
-        proj_inputs = torch.cat([encoded_context, encoded_query], dim=1)
-        
-        zero_logits = self.zero_proj(proj_inputs).squeeze(dim=-1)
         zero_truth = (answer == .0).float()
+
+        proj_inputs = torch.cat([encoded_context, encoded_query, zero_truth.unsqueeze(1)], dim=1)
+        zero_logits = self.zero_proj(proj_inputs).squeeze(dim=-1)
+        # zero_truth = (answer == .0).float()
         zero_loss = self.zero_objective(zero_logits, zero_truth).mean()
 
         # Since we have cross entropy loss for zero rates, the minimum value for rate should be 1. 
@@ -111,7 +112,7 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
         else:
             trucated_poisson_loss = torch.zeros_like(zero_loss)
 
-        loss = zero_loss + trucated_poisson_loss
+        loss = zero_loss # + trucated_poisson_loss
 
         zero_sample = torch.distributions.bernoulli.Bernoulli(logits=zero_logits).sample()
         rate_sample = self.sample_zero_truncated_poisson(log_rate) 
@@ -129,7 +130,6 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
             'zero_truth':zero_truth,
         }
         return out 
- 
 
 class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLoss(torch.nn.Module):
 
@@ -222,6 +222,5 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
         encoded_context = self.safe_max_seq_dim(encoded_context.last_hidden_state, context.event_mask)
         query_embed = self.query_embedding_layer(query, **kwargs) 
         encoded_query = query_embed # (todo) self.query_encoder(query_embed, **kwargs)
-        encoded_query[:,-1] = query['answer']
         output = self.output_layer(encoded_context, encoded_query, answer, query['population_rate'])
         return output
