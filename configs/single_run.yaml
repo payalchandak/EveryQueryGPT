@@ -64,10 +64,10 @@ trainer_config:
   detect_anomaly: False
   log_every_n_steps: 10
   strategy: auto 
-  fast_dev_run: False 
+  fast_dev_run: False
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
-  name: answer-is-query-embed
+  name: debug
   entity: payal-collabs
   project: EveryQueryGPT
   team: null
