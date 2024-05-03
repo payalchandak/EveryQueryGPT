@@ -64,8 +64,8 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
         config: StructuredTransformerConfig,
     ):
         super().__init__()
-        self.rate_proj = torch.nn.Linear(config.hidden_size*2+1, 1)
-        self.zero_proj = torch.nn.Linear(config.hidden_size*2+1, 1) 
+        self.rate_proj = torch.nn.Linear(1, 1)
+        self.zero_proj = torch.nn.Linear(1, 1) 
         self.zero_objective = torch.nn.BCEWithLogitsLoss()
     
     def stable_log_exp_minus_one_exp(self, x):
@@ -94,11 +94,12 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(t
         assert encoded_context.shape == encoded_query.shape, f"encoded_context {encoded_context.shape} and encoded_query {encoded_query.shape} should be (batch_size, hidden_size)"
         
         zero_truth = (answer == .0).float()
-
-        proj_inputs = torch.cat([encoded_context, encoded_query, zero_truth.unsqueeze(1)], dim=1)
-        zero_logits = self.zero_proj(proj_inputs).squeeze(dim=-1)
+        proj_inputs = torch.cat([zero_truth.unsqueeze(1)], dim=1)
+        zero_logits = self.zero_proj(zero_truth.unsqueeze(1)).squeeze(dim=-1)
         # zero_truth = (answer == .0).float()
         zero_loss = self.zero_objective(zero_logits, zero_truth).mean()
+        print(zero_truth, answer, zero_logits)
+        print()
 
         # Since we have cross entropy loss for zero rates, the minimum value for rate should be 1. 
         # This means the minimum value for log_rate is 0, and thus we can put it through a ReLU. 
@@ -194,6 +195,37 @@ class EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLoss(torch.nn.Module):
         }
         return out 
  
+# class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel): 
+#     def __init__(
+#         self,
+#         config: StructuredTransformerConfig,
+#     ):
+#         super().__init__(config)
+
+#         if config.structured_event_processing_mode != StructuredEventProcessingMode.CONDITIONALLY_INDEPENDENT:
+#             raise ValueError(f"{config.structured_event_processing_mode} invalid!")
+
+#         self.context_encoder = ConditionallyIndependentPointProcessTransformer(config)
+#         self.query_embedding_layer = self.context_encoder.input_layer.data_embedding_layer.query_embedding
+#         self.query_encoder = None # MLP ?? 
+#         self.output_layer = EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(config)
+    
+#     def safe_max_seq_dim(self, X: torch.Tensor, mask: torch.BoolTensor):
+#         # X is batch_size, seq_len, hidden_dim
+#         mask = mask.unsqueeze(-1).expand_as(X) 
+#         masked_X = torch.where(mask, X, -float("inf"))
+#         maxes = masked_X.max(1)[0]
+#         return torch.nan_to_num(maxes, nan=None, posinf=None, neginf=0)
+
+#     def forward(self, batch: PytorchBatch, **kwargs) -> torch.FloatTensor: 
+#         context, query, answer = batch['context'], batch['query'], batch['answer']
+#         encoded_context = self.context_encoder(context, **kwargs)
+#         encoded_context = self.safe_max_seq_dim(encoded_context.last_hidden_state, context.event_mask)
+#         query_embed = self.query_embedding_layer(query, **kwargs) 
+#         encoded_query = query_embed # (todo) self.query_encoder(query_embed, **kwargs)
+#         output = self.output_layer(encoded_context, encoded_query, answer, query['population_rate'])
+#         return output
+
 class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel): 
     def __init__(
         self,
@@ -201,26 +233,28 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
     ):
         super().__init__(config)
 
-        if config.structured_event_processing_mode != StructuredEventProcessingMode.CONDITIONALLY_INDEPENDENT:
-            raise ValueError(f"{config.structured_event_processing_mode} invalid!")
-
-        self.context_encoder = ConditionallyIndependentPointProcessTransformer(config)
-        self.query_embedding_layer = self.context_encoder.input_layer.data_embedding_layer.query_embedding
-        self.query_encoder = None # MLP ?? 
-        self.output_layer = EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(config)
+        self.zero_proj = torch.nn.Linear(1, 1) 
+        self.zero_objective = torch.nn.BCEWithLogitsLoss()
     
-    def safe_max_seq_dim(self, X: torch.Tensor, mask: torch.BoolTensor):
-        # X is batch_size, seq_len, hidden_dim
-        mask = mask.unsqueeze(-1).expand_as(X) 
-        masked_X = torch.where(mask, X, -float("inf"))
-        maxes = masked_X.max(1)[0]
-        return torch.nan_to_num(maxes, nan=None, posinf=None, neginf=0)
-
     def forward(self, batch: PytorchBatch, **kwargs) -> torch.FloatTensor: 
         context, query, answer = batch['context'], batch['query'], batch['answer']
-        encoded_context = self.context_encoder(context, **kwargs)
-        encoded_context = self.safe_max_seq_dim(encoded_context.last_hidden_state, context.event_mask)
-        query_embed = self.query_embedding_layer(query, **kwargs) 
-        encoded_query = query_embed # (todo) self.query_encoder(query_embed, **kwargs)
-        output = self.output_layer(encoded_context, encoded_query, answer, query['population_rate'])
+
+        zero_truth = (answer == 0).float()
+        zero_logits = self.zero_proj(zero_truth.unsqueeze(1)).squeeze(dim=-1)
+        zero_prob = torch.sigmoid(zero_logits)
+
+        print('grad',[param.grad for param in self.zero_proj.parameters()])
+        print('param',[param for param in self.zero_proj.parameters()])
+        zero_loss = self.zero_objective(zero_logits, zero_truth).mean()
+
+        output = {
+            'loss':zero_loss, 
+            'zero_loss':zero_loss, 
+            'zero_prob':zero_prob, 
+            'zero_truth':zero_truth,
+            'rate':torch.tensor([]),
+            'answer':torch.tensor([]),
+            'truncated_rate':torch.tensor([]),
+            'truncated_answer':torch.tensor([]),
+        }
         return output
