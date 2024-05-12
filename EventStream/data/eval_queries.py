@@ -40,7 +40,7 @@ OTHER_CODES = [
         'code':'Flat foot',
     },
 ]
-EVAL_CODES = [
+HEART_CODES = [
     {
         'name': 'Hypertension',
         'code':'Essential (primary) hypertension',
@@ -210,3 +210,4 @@ EVAL_CODES = [
         'code':'Syncope and collapse',
     },
 ]
+EVAL_CODES = HEART_CODES + OTHER_CODES
