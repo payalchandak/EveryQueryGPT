@@ -233,14 +233,35 @@ class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel):
     ):
         super().__init__(config)
 
-        self.zero_proj = torch.nn.Linear(1, 1) 
+        if config.structured_event_processing_mode != StructuredEventProcessingMode.CONDITIONALLY_INDEPENDENT:
+            raise ValueError(f"{config.structured_event_processing_mode} invalid!")
+
+        self.context_encoder = ConditionallyIndependentPointProcessTransformer(config)
+        self.query_embedding_layer = self.context_encoder.input_layer.data_embedding_layer.query_embedding
+        self.query_encoder = None # MLP ?? 
+        self.output_layer = EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(config)
+    
+        self.zero_proj = torch.nn.Linear(config.hidden_size*2 + 1, 1) 
         self.zero_objective = torch.nn.BCEWithLogitsLoss()
     
+    def safe_max_seq_dim(self, X: torch.Tensor, mask: torch.BoolTensor):
+        # X is batch_size, seq_len, hidden_dim
+        mask = mask.unsqueeze(-1).expand_as(X) 
+        masked_X = torch.where(mask, X, -float("inf"))
+        maxes = masked_X.max(1)[0]
+        return torch.nan_to_num(maxes, nan=None, posinf=None, neginf=0)
+
+
     def forward(self, batch: PytorchBatch, **kwargs) -> torch.FloatTensor: 
         context, query, answer = batch['context'], batch['query'], batch['answer']
 
+        encoded_context = self.context_encoder(context, **kwargs)
+        encoded_context = self.safe_max_seq_dim(encoded_context.last_hidden_state, context.event_mask)
+        query_embed = self.query_embedding_layer(query, **kwargs) 
+        encoded_query = query_embed 
+        
         zero_truth = (answer == 0).float()
-        zero_logits = self.zero_proj(zero_truth.unsqueeze(1)).squeeze(dim=-1)
+        zero_logits = self.zero_proj(torch.cat([encoded_context, encoded_query, zero_truth.unsqueeze(1)],dim=1)).squeeze(dim=-1)
         zero_prob = torch.sigmoid(zero_logits)
 
         print('grad',[param.grad for param in self.zero_proj.parameters()])

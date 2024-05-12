@@ -27,11 +27,11 @@ config:
   resid_dropout: 0.0
   intermediate_size: 256
 optimization_config:
-  init_lr: 0.1
+  init_lr: 1e-3
   end_lr_frac_of_init_lr: 0.1
   end_lr: null
   max_epochs: 100
-  batch_size: 128 # 512
+  batch_size: 1024
   validation_batch_size: 256
   lr_frac_warmup_steps: 0.05
   lr_decay_power: 1
@@ -60,17 +60,17 @@ data_config:
   population_rates:
 trainer_config:
   accelerator: auto
-  devices: [1] # auto
-  detect_anomaly: True
+  devices: [2] # auto
+  detect_anomaly: False
   log_every_n_steps: 10
   strategy: auto 
   fast_dev_run: False
 experiment_dir: /storage2/payal/every_query_models/
 wandb_logger_kwargs:
-  name: debug-real-no-regularization
+  name: debug-batch-1024
   entity: payal-collabs
   project: EveryQueryGPT
   team: null
   log_model: False
-  do_log_graph: True
+  do_log_graph: False
 do_final_validation_on_metrics: True
