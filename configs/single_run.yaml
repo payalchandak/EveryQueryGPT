@@ -60,14 +60,14 @@ data_config:
   population_rates:
 trainer_config:
   accelerator: auto
-  devices: [2] # auto
+  devices: [0]
   detect_anomaly: False
   log_every_n_steps: 10
   strategy: auto 
   fast_dev_run: False
-experiment_dir: /storage2/payal/every_query_models/
+experiment_dir: /storage/chandak/models/EveryQuery/
 wandb_logger_kwargs:
-  name: debug-batch-1024
+  name: test-glam
   entity: payal-collabs
   project: EveryQueryGPT
   team: null
