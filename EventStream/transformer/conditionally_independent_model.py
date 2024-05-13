@@ -230,37 +230,6 @@ class DebugOutputLayer(torch.nn.Module):
         }
         return output 
 
-# class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel): 
-#     def __init__(
-#         self,
-#         config: StructuredTransformerConfig,
-#     ):
-#         super().__init__(config)
-
-#         if config.structured_event_processing_mode != StructuredEventProcessingMode.CONDITIONALLY_INDEPENDENT:
-#             raise ValueError(f"{config.structured_event_processing_mode} invalid!")
-
-#         self.context_encoder = ConditionallyIndependentPointProcessTransformer(config)
-#         self.query_embedding_layer = self.context_encoder.input_layer.data_embedding_layer.query_embedding
-#         self.query_encoder = None # MLP ?? 
-#         self.output_layer = EveryQueryOutputLayerwithZeroBCEandTruncatedPoissonLossandPopulationRate(config)
-    
-#     def safe_max_seq_dim(self, X: torch.Tensor, mask: torch.BoolTensor):
-#         # X is batch_size, seq_len, hidden_dim
-#         mask = mask.unsqueeze(-1).expand_as(X) 
-#         masked_X = torch.where(mask, X, -float("inf"))
-#         maxes = masked_X.max(1)[0]
-#         return torch.nan_to_num(maxes, nan=None, posinf=None, neginf=0)
-
-#     def forward(self, batch: PytorchBatch, **kwargs) -> torch.FloatTensor: 
-#         context, query, answer = batch['context'], batch['query'], batch['answer']
-#         encoded_context = self.context_encoder(context, **kwargs)
-#         encoded_context = self.safe_max_seq_dim(encoded_context.last_hidden_state, context.event_mask)
-#         query_embed = self.query_embedding_layer(query, **kwargs) 
-#         encoded_query = query_embed # (todo) self.query_encoder(query_embed, **kwargs)
-#         output = self.output_layer(encoded_context, encoded_query, answer, query['population_rate'])
-#         return output
-
 class CIPPTForGenerativeSequenceModeling(StructuredTransformerPreTrainedModel): 
     def __init__(
         self,

@@ -357,7 +357,7 @@ def train(cfg: PretrainConfig):
         num_workers=optimization_config.num_dataloader_workers,
         collate_fn=train_pyd.collate,
         shuffle=True, 
-        drop_last=True, # TODO REMOVE 
+        # drop_last=True, # TODO REMOVE 
     )
     tuning_dataloader = torch.utils.data.DataLoader(
         tuning_pyd,
