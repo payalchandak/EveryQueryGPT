@@ -38,7 +38,7 @@ optimization_config:
   weight_decay: 0.0
   patience: 50
   gradient_accumulation: null
-  num_dataloader_workers: 2
+  num_dataloader_workers: 20
 data_config:
   save_dir: /storage/shared/mgh-hf-dataset/processed/ESD_09-01-23-1/
   max_seq_len: 128
@@ -67,7 +67,7 @@ trainer_config:
   fast_dev_run: False
 experiment_dir: /storage/chandak/models/EveryQuery/
 wandb_logger_kwargs:
-  name: test-glam
+  name: debug-poisson-loss-objective
   entity: payal-collabs
   project: EveryQueryGPT
   team: null

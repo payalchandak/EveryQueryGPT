@@ -203,7 +203,7 @@ class DebugOutputLayer(torch.nn.Module):
     ):
         super().__init__()
 
-        self.rate_proj = torch.nn.Linear(config.hidden_size*2, 1) 
+        self.rate_proj = torch.nn.Linear(config.hidden_size*2 + 1, 1) 
         self.zero_proj = torch.nn.Linear(config.hidden_size*2 + 1, 1) 
         self.zero_objective = torch.nn.BCEWithLogitsLoss()
 
@@ -235,7 +235,7 @@ class DebugOutputLayer(torch.nn.Module):
 
         zero_loss = self.zero_objective(zero_logits, zero_truth).mean()
 
-        log_rate = self.rate_proj(torch.cat([encoded_context, encoded_query],dim=1)) #+ torch.log(population_rate).unsqueeze(1)
+        log_rate = self.rate_proj(torch.cat([encoded_context, encoded_query, answer.unsqueeze(1)],dim=1)) #+ torch.log(population_rate).unsqueeze(1)
         log_rate = torch.relu(log_rate)  
 
         mask = (answer != .0)
@@ -245,7 +245,7 @@ class DebugOutputLayer(torch.nn.Module):
         else:
             trucated_poisson_loss = torch.zeros_like(zero_loss)
 
-        loss = zero_loss # + trucated_poisson_loss
+        loss = zero_loss + trucated_poisson_loss
 
         zero_sample = torch.distributions.bernoulli.Bernoulli(logits=zero_logits).sample()
         rate_sample = self.sample_zero_truncated_poisson(log_rate) 
