@@ -244,8 +244,9 @@ class DebugOutputLayer(torch.nn.Module):
             trucated_poisson_loss = torch.mean(trucated_poisson_loss)
         else:
             trucated_poisson_loss = torch.zeros_like(zero_loss)
+        trucated_poisson_loss = 0.01 * trucated_poisson_loss
 
-        loss = zero_loss + 0.01 * trucated_poisson_loss
+        loss = zero_loss + trucated_poisson_loss
 
         zero_sample = torch.distributions.bernoulli.Bernoulli(logits=zero_logits).sample()
         rate_sample = self.sample_zero_truncated_poisson(log_rate) 
@@ -254,6 +255,7 @@ class DebugOutputLayer(torch.nn.Module):
         output = {
             'loss':loss, 
             'zero_loss':zero_loss, 
+            'trucated_poisson_loss':trucated_poisson_loss,
             'zero_prob':zero_prob, 
             'zero_truth':zero_truth,
             'rate':rate.squeeze(),
