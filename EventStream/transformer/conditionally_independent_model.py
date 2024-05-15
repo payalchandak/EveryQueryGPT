@@ -203,24 +203,8 @@ class DebugOutputLayer(torch.nn.Module):
     ):
         super().__init__()
 
-        self.rate_proj = torch.nn.Linear(config.hidden_size*2 + 1, 1) 
         self.zero_proj = torch.nn.Linear(config.hidden_size*2 + 1, 1) 
         self.zero_objective = torch.nn.BCEWithLogitsLoss()
-
-    def stable_log_exp_minus_one_exp(self, x):
-        # torch.exp(x) - torch.log(torch.special.expm1(torch.exp(x))) 
-        # this difference is numerically zero at 2.683
-        threshold = torch.tensor(2.6)
-        large_x_approximation = torch.exp(x)
-        small_x_approximation = torch.log(torch.special.expm1(torch.exp(x)))
-        result = torch.where(x > threshold, large_x_approximation, small_x_approximation)
-        return result
-
-    def sample_zero_truncated_poisson(self, log_rate):
-        rate = torch.exp(log_rate).squeeze()
-        u = torch.distributions.uniform.Uniform(low=torch.exp(-rate), high=1).sample()
-        t = -torch.log(u)
-        return 1 + torch.distributions.poisson.Poisson(rate = rate-t).sample()
 
     def forward(
         self,
@@ -228,40 +212,21 @@ class DebugOutputLayer(torch.nn.Module):
         encoded_query,
         answer,
     ):
-
         zero_truth = (answer == 0).float()
         zero_logits = self.zero_proj(torch.cat([encoded_context, encoded_query, zero_truth.unsqueeze(1)],dim=1)).squeeze(dim=-1)
         zero_prob = torch.sigmoid(zero_logits)
 
         zero_loss = self.zero_objective(zero_logits, zero_truth).mean()
 
-        log_rate = self.rate_proj(torch.cat([encoded_context, encoded_query, answer.unsqueeze(1)],dim=1)) #+ torch.log(population_rate).unsqueeze(1)
-        log_rate = torch.relu(log_rate)  
-
-        mask = (answer != .0)
-        if torch.sum(mask) > 0: 
-            trucated_poisson_loss = - (answer[mask] * log_rate[mask]) + self.stable_log_exp_minus_one_exp(log_rate[mask])
-            trucated_poisson_loss = torch.mean(trucated_poisson_loss)
-        else:
-            trucated_poisson_loss = torch.zeros_like(zero_loss)
-        trucated_poisson_loss = 0.01 * trucated_poisson_loss
-
-        loss = zero_loss + trucated_poisson_loss
-
-        zero_sample = torch.distributions.bernoulli.Bernoulli(logits=zero_logits).sample()
-        rate_sample = self.sample_zero_truncated_poisson(log_rate) 
-        rate = torch.where(zero_sample.bool(), torch.zeros_like(zero_sample), rate_sample)
-
         output = {
-            'loss':loss, 
+            'loss':zero_loss, 
             'zero_loss':zero_loss, 
-            'trucated_poisson_loss':trucated_poisson_loss,
             'zero_prob':zero_prob, 
             'zero_truth':zero_truth,
-            'rate':rate.squeeze(),
-            'answer':answer.squeeze(),
-            'truncated_rate':torch.exp(log_rate)[mask].squeeze(), # corrcoef where (answer != .0)
-            'truncated_answer':answer[mask].squeeze(),
+            'rate':torch.tensor([]),
+            'answer':torch.tensor([]),
+            'truncated_rate':torch.tensor([]),
+            'truncated_answer':torch.tensor([]),
         }
         return output 
 
