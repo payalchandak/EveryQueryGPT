@@ -248,7 +248,12 @@ class PretrainConfig:
         )
     )
     final_validation_metrics_config: MetricsConfig = dataclasses.field(
-        default_factory=lambda: MetricsConfig(do_skip_all_metrics=False)
+        default_factory=lambda: MetricsConfig(
+            include_metrics={
+                Split.TUNING: {MetricCategories.LOSS_PARTS: True},
+                Split.HELD_OUT: {MetricCategories.LOSS_PARTS: True},
+            },
+        )
     )
 
     trainer_config: dict[str, Any] = dataclasses.field(
@@ -413,7 +418,6 @@ def train(cfg: PretrainConfig):
     # trainer_kwargs['strategy'] = 'ddp_find_unused_parameters_true'
     trainer = L.Trainer(**trainer_kwargs)
     trainer.fit(model=LM, train_dataloaders=train_dataloader, val_dataloaders=tuning_dataloader)
-
     LM.save_pretrained(cfg.save_dir)
 
     if cfg.do_final_validation_on_metrics:
