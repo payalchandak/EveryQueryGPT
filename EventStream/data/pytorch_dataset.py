@@ -499,7 +499,8 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
         # sample query duration
         start_time = static_row["start_time"].item().timestamp() / 60 # minutes 
         time_delta = static_row["time_delta"].item().to_list()
-        times = np.array([sum(time_delta[:i]) for i in range(1, len(time_delta))])
+        if np.isnan(time_delta[-1]): time_delta[-1] = 1.0
+        times = np.array([sum(time_delta[:i]) for i in range(1, len(time_delta)+1)])
         record_duration = times[-1]
         min_input_duration = times[1] # so that we have at least one event in input
         query_duration = np.random.randint(min_query_duration, min(max_query_duration, record_duration-min_input_duration))
@@ -513,7 +514,6 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
 
         # sample input start and end 
         max_input_end_time = start_time + record_duration - query_duration
-        print('max_input_end_time', max_input_end_time)
         max_input_end_idx = np.max(np.argwhere((times+start_time) < max_input_end_time))
         if max_input_end_idx > self.max_seq_len: 
             input_start_idx = np.random.choice(max_input_end_idx - self.max_seq_len)
