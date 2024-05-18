@@ -1100,13 +1100,12 @@ class PytorchDatasetConfig(JSONableMixin):
                 obs_freq = ofoc * ofpc * vocab_obs_freq
                 if has_value: 
                     assert cfg.measurement_metadata is not None 
-                    normalizer = cfg.measurement_metadata.normalizer
-                    if isinstance(normalizer, pd.Series): 
-                        mean = normalizer[code_name]['mean_']
-                        std = normalizer[code_name]['std_']
+                    if isinstance(cfg.measurement_metadata, pd.DataFrame): 
+                        mean = cfg.measurement_metadata.loc[code_name,'mean']
+                        std = cfg.measurement_metadata.loc[code_name,'std']
                     else:
-                        mean = normalizer['mean_']
-                        std = normalizer['std_']
+                        mean = cfg.measurement_metadata['mean']
+                        std = cfg.measurement_metadata['std']
                 else: 
                     mean, std = None, None 
                 code_info = {
@@ -1145,7 +1144,7 @@ class PytorchDatasetConfig(JSONableMixin):
                 code['range_min'], code['range_max'] = sorted([scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1), 
                                                                scipy.stats.norm.ppf(np.random.rand(), loc=0, scale=1)])
 
-        code['population_rate'] = self.population_rates[code['idx']]
+        # code['population_rate'] = self.population_rates[code['idx']]
         return code
 
 

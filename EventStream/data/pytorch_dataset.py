@@ -544,18 +544,19 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
         dynamic = JointNestedRaggedTensorDict.load_slice(self.NRTs_dir / f"{shard}.pt", subject_idx)
 
         answer = 0
-        query_dynamic = dynamic[query_start_idx:query_end_idx].to_dense()
-        query_dynamic_indices = query_dynamic['dynamic_indices']
-        query_dynamic_values = query_dynamic['dynamic_values']
-        for i in range(len(query_dynamic_indices)): 
-            for j in range(len(query_dynamic_indices[i])): 
-                if query_dynamic_indices[i][j] == code['idx']:
-                    if code['has_value']: 
-                        x = query_dynamic_values[i][j]
-                        if x is None: continue # todo: check sometimes None –– outlier detector?  
-                        if (x>=code['range_min']) and (x<=code['range_max']): 
-                            answer += 1
-                    else: answer += 1
+        if query_start_idx<query_end_idx:
+            query_dynamic = dynamic[query_start_idx:query_end_idx].to_dense()
+            query_dynamic_indices = query_dynamic['dynamic_indices']
+            query_dynamic_values = query_dynamic['dynamic_values']
+            for i in range(len(query_dynamic_indices)): 
+                for j in range(len(query_dynamic_indices[i])): 
+                    if query_dynamic_indices[i][j] == code['idx']:
+                        if code['has_value']: 
+                            x = query_dynamic_values[i][j]
+                            if x is None: continue # todo: check sometimes None –– outlier detector?  
+                            if (x>=code['range_min']) and (x<=code['range_max']): 
+                                answer += 1
+                        else: answer += 1
 
         input["dynamic"] = dynamic[input_start_idx:input_end_idx]
 
@@ -574,7 +575,7 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
             'code_type': code['type'],
             'range_min': code['range_min'], 
             'range_max': code['range_max'], 
-            'population_rate': code['population_rate'],
+            # 'population_rate': code['population_rate'],
             'answer':answer,
         } 
 
@@ -586,49 +587,6 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
         if self.config.fixed_time_mode: item['enough_future_observed'] = enough_future_observed
 
         return item
-
-    def __static_and_dynamic_collate(
-        self, batch: list[DATA_ITEM_T], do_convert_float_nans: bool = True
-    ) -> PytorchBatch:
-        """An internal collate function for both static and dynamic data."""
-        out_batch = self.__dynamic_only_collate(batch, do_convert_float_nans=do_convert_float_nans)
-
-        # Get the maximum number of static elements in the batch.
-        max_n_static = max(len(e["static_indices"]) for e in batch)
-
-        # Walk through the batch and pad the associated tensors in all requisite dimensions.
-        self._register_start("collate_static_padding")
-        out = defaultdict(list)
-        for e in batch:
-            if self.do_produce_static_data:
-                n_static = len(e["static_indices"])
-                static_delta = max_n_static - n_static
-                out["static_indices"].append(
-                    torch.nn.functional.pad(
-                        torch.Tensor(e["static_indices"]), (0, static_delta), value=np.NaN
-                    )
-                )
-                out["static_measurement_indices"].append(
-                    torch.nn.functional.pad(
-                        torch.Tensor(e["static_measurement_indices"]),
-                        (0, static_delta),
-                        value=np.NaN,
-                    )
-                )
-        self._register_end("collate_static_padding")
-
-        self._register_start("collate_static_post_padding")
-        # Unsqueeze the padded tensors into the batch dimension and combine them.
-        out = {k: torch.cat([T.unsqueeze(0) for T in Ts], dim=0) for k, Ts in out.items()}
-
-        # Convert to the right types and add to the batch.
-        out_batch["static_indices"] = torch.nan_to_num(out["static_indices"], nan=0).long()
-        out_batch["static_measurement_indices"] = torch.nan_to_num(
-            out["static_measurement_indices"], nan=0
-        ).long()
-        self._register_end("collate_static_post_padding")
-
-        return out_batch
 
     def __dynamic_only_collate(self, batch: list[dict[str, list[float]]]) -> PytorchBatch:
         """An internal collate function for only dynamic data."""
@@ -695,7 +653,42 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
 
         return out_batch
 
-    def collate(self, batch: list[DATA_ITEM_T], do_convert_float_nans: bool = True) -> PytorchBatch:
+    def __collate_inputs(self, batch: list[DATA_ITEM_T]) -> PytorchBatch:
+        """Combines the ragged dictionaries produced by `__getitem__` into a tensorized batch.
+
+        This function handles conversion of arrays to tensors and padding of elements within the batch across
+        static data elements, sequence events, and dynamic data elements.
+
+        Args:
+            batch: A list of `__getitem__` format output dictionaries.
+
+        Returns:
+            A fully collated, tensorized, and padded batch.
+        """
+
+        out_batch = self.__dynamic_only_collate(batch)
+
+        max_n_static = max(len(x["static_indices"]) for x in batch)
+        static_padded_fields = defaultdict(list)
+        for e in batch:
+            n_static = len(e["static_indices"])
+            static_delta = max_n_static - n_static
+            for k in ("static_indices", "static_measurement_indices"):
+                if static_delta > 0:
+                    static_padded_fields[k].append(
+                        torch.nn.functional.pad(
+                            torch.tensor(e[k], dtype=torch.long), (0, static_delta), value=0
+                        )
+                    )
+                else:
+                    static_padded_fields[k].append(torch.tensor(e[k], dtype=torch.long))
+
+        for k, v in static_padded_fields.items():
+            out_batch[k] = torch.cat([T.unsqueeze(0) for T in v], dim=0)
+
+        return out_batch
+
+    def collate(self, batch: list[DATA_ITEM_T]) -> PytorchBatch:
         """Combines the ragged dictionaries produced by `__getitem__` into a tensorized batch.
 
         This function handles conversion of arrays to tensors and padding of elements within the batch across
@@ -713,10 +706,7 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
             batch = [dct for idx, dct in enumerate(batch) if idx in fixed_time_idx]
         
         inputs = [dct['input'] for dct in batch]
-        if self.do_produce_static_data:
-            inputs = self.__static_and_dynamic_collate(inputs, do_convert_float_nans=do_convert_float_nans)
-        else:
-            inputs = self.__dynamic_only_collate(inputs, do_convert_float_nans=do_convert_float_nans)
+        inputs = self.__collate_inputs(inputs)
         
         queries = [dct['query'] for dct in batch]
         queries = {
@@ -728,7 +718,7 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
             'range_max': torch.tensor([q['range_max'] for q in queries], dtype=torch.float),
             '_code_type': torch.tensor([1.0 for q in queries], dtype=torch.float),
             '_cat_mask':torch.tensor([True for q in queries], dtype=torch.bool),
-            'population_rate': torch.tensor([q['population_rate'] for q in queries], dtype=torch.float),
+            # 'population_rate': torch.tensor([q['population_rate'] for q in queries], dtype=torch.float),
             'answer': torch.tensor([q['answer']==1 for q in queries], dtype=torch.float),
         }
 
