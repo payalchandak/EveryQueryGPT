@@ -324,7 +324,7 @@ def train(cfg: PretrainConfig):
 
     config.set_to_dataset(train_pyd)
     optimization_config.set_to_dataset(train_pyd)
-    data_config.set_to_dataset(train_pyd)
+    # data_config.set_to_dataset(train_pyd)
 
     tuning_pyd = PytorchDataset(data_config, split="tuning")
 

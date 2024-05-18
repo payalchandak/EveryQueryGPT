@@ -497,8 +497,9 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
                 fixed_offset =  self.config.fixed_time['offset'] * 60*24 
 
         # sample query duration
-        start_time = static_row["start_time"].timestamp() / 60 # minutes 
-        times = np.array([sum(static_row["time_delta"][:i]) for i in range(1, len(static_row["time_delta"])+1)])
+        start_time = static_row["start_time"].item().timestamp() / 60 # minutes 
+        time_delta = static_row["time_delta"].item().to_list()
+        times = np.array([sum(time_delta[:i]) for i in range(1, len(time_delta))])
         record_duration = times[-1]
         min_input_duration = times[1] # so that we have at least one event in input
         query_duration = np.random.randint(min_query_duration, min(max_query_duration, record_duration-min_input_duration))
@@ -512,6 +513,7 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
 
         # sample input start and end 
         max_input_end_time = start_time + record_duration - query_duration
+        print('max_input_end_time', max_input_end_time)
         max_input_end_idx = np.max(np.argwhere((times+start_time) < max_input_end_time))
         if max_input_end_idx > self.max_seq_len: 
             input_start_idx = np.random.choice(max_input_end_idx - self.max_seq_len)
@@ -557,17 +559,8 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
 
         input["dynamic"] = dynamic[input_start_idx:input_end_idx]
 
-        # if self.config.do_include_start_time_min:
-        #     # Note that this is using the python datetime module's `timestamp` function which differs from
-        #     # some dataframe libraries' timestamp functions (e.g., polars).
-        #     full_subj_data["start_time"] = full_subj_data["start_time"].timestamp() / 60.0
-        # else:
-        #     full_subj_data.pop("start_time")
-
         if self.config.do_include_start_time_min:
-            input["start_time"] = static_row["start_time"] = static_row[
-                "start_time"
-            ].item().timestamp() / 60.0 + sum(static_row["time_delta"].item().to_list()[:st])
+            input["start_time"] = static_row["start_time"].item().timestamp() / 60.0 + sum(static_row["time_delta"].item().to_list()[:input_start_idx])
 
         for t, t_labels in self.labels.items():
             input[t] = t_labels[idx]
