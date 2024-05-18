@@ -203,7 +203,7 @@ class DebugOutputLayer(torch.nn.Module):
     ):
         super().__init__()
 
-        self.zero_proj = torch.nn.Linear(config.hidden_size*2 + 1, 1) 
+        self.zero_proj = torch.nn.Linear(config.hidden_size * 2, 1) 
         self.zero_objective = torch.nn.BCEWithLogitsLoss()
 
     def forward(
@@ -212,8 +212,10 @@ class DebugOutputLayer(torch.nn.Module):
         encoded_query,
         answer,
     ):
+        proj_inputs = torch.cat([encoded_context, encoded_query], dim=1)
+        zero_logits = self.zero_proj(proj_inputs).squeeze(dim=-1)
+        
         zero_truth = (answer == 0).float()
-        zero_logits = self.zero_proj(torch.cat([encoded_context, encoded_query, zero_truth.unsqueeze(1)],dim=1)).squeeze(dim=-1)
         zero_prob = torch.sigmoid(zero_logits)
 
         zero_loss = self.zero_objective(zero_logits, zero_truth).mean()
