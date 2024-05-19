@@ -576,7 +576,6 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
             'range_min': code['range_min'], 
             'range_max': code['range_max'], 
             # 'population_rate': code['population_rate'],
-            'answer':answer,
         } 
 
         item = {
@@ -719,7 +718,6 @@ class PytorchDataset(SeedableMixin, torch.utils.data.Dataset):
             '_code_type': torch.tensor([1.0 for q in queries], dtype=torch.float),
             '_cat_mask':torch.tensor([True for q in queries], dtype=torch.bool),
             # 'population_rate': torch.tensor([q['population_rate'] for q in queries], dtype=torch.float),
-            'answer': torch.tensor([q['answer']==1 for q in queries], dtype=torch.float),
         }
 
         answers = [dct['answer'] for dct in batch]
