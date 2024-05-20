@@ -1101,11 +1101,11 @@ class PytorchDatasetConfig(JSONableMixin):
                 if has_value: 
                     assert cfg.measurement_metadata is not None 
                     if isinstance(cfg.measurement_metadata, pd.DataFrame): 
-                        mean = cfg.measurement_metadata.loc[code_name,'mean']
-                        std = cfg.measurement_metadata.loc[code_name,'std']
+                        mean = float(cfg.measurement_metadata.loc[code_name,'mean'])
+                        std = float(cfg.measurement_metadata.loc[code_name,'std'])
                     else:
-                        mean = cfg.measurement_metadata['mean']
-                        std = cfg.measurement_metadata['std']
+                        mean = float(cfg.measurement_metadata['mean'])
+                        std = float(cfg.measurement_metadata['std'])
                 else: 
                     mean, std = None, None 
                 code_info = {
@@ -1133,10 +1133,10 @@ class PytorchDatasetConfig(JSONableMixin):
         code['range_min'], code['range_max'] = .0, .0
         if code['has_value']:
             if self.fixed_code_mode: 
-                if 'range_min' not in self.fixed_code.keys(): raise ValueError(f"Need to specify range_min for {self.fixed_code['name']}, specify .0 for mean")
-                if 'range_max' not in self.fixed_code.keys(): raise ValueError(f"Need to specify range_max for {self.fixed_code['name']}, specify .0 for mean")
+                if 'range_min' not in self.fixed_code.keys(): raise ValueError(f"Need to specify range_min for {self.fixed_code['name']}")
+                if 'range_max' not in self.fixed_code.keys(): raise ValueError(f"Need to specify range_max for {self.fixed_code['name']}")
                 if (self.fixed_code['range_min'] != .0) and (self.fixed_code['range_max'] != .0):
-                    # range is provided in un-normalized units 
+                    # range is provided in un-normalized units by user
                     code['range_min'] = (self.fixed_code['range_min'] - code['normalizer_mean']) / code['normalizer_std']
                     code['range_max'] = (self.fixed_code['range_max'] - code['normalizer_mean']) / code['normalizer_std']
             else: 
