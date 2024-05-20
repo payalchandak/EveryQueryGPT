@@ -29,19 +29,19 @@ from EventStream.tasks.profile import add_tasks_from
 import pandas as pd, seaborn as sns, matplotlib.pyplot as plt
 
 
-COHORT_NAME = "ESD_09-01-23-1"
+COHORT_NAME = "ESD_NRT_05-17-24-1"
 TASK_NAME = "readmission_30d_all"
 PROJECT_DIR = Path(os.environ["PROJECT_DIR"])
 dataset_dir = f"/storage/shared/mgh-hf-dataset/processed/{COHORT_NAME}" # PROJECT_DIR / "data" / COHORT_NAME
 
-codes = EVAL_CODES
-heart_answers = {code['name']:[] for code in codes}
+codes = EVAL_CODES[:5]
+query_answers = {code['name']:[] for code in codes}
 for code in codes: 
     L.seed_everything(1)
     pyd_config = PytorchDatasetConfig(
         save_dir=dataset_dir,
         max_seq_len=256,
-        train_subset_size=0.1,
+        train_subset_size=0.001,
         train_subset_seed=79163,
         do_include_start_time_min=True,
         fixed_code_mode=True,
@@ -53,19 +53,25 @@ for code in codes:
     config=pyd_config, 
     split='train'
     )
-    print(len(pyd))
-    pyd_config.set_to_dataset(pyd)
-    for x in pyd:
-        heart_answers[code['name']].append(x['answer'])
+    ans = [x['answer'] for x in pyd]
+    print(len(pyd), len(ans))
+    query_answers[code['name']].extend(ans)
 
-df = pd.DataFrame(heart_answers)
+df = pd.DataFrame(query_answers)
 corr_matrix = df.corr()
 plt.figure(figsize=(12, 10))
 sns.heatmap(corr_matrix, annot=False, fmt=".2f", cmap='coolwarm', vmin=-1, vmax=1)
-plt.title("Correlation Heatmap of Answers")
-plt.savefig(f"tmp/corr.png")
-plt.close()
+plt.title("Heatmap of Answer Correlations"); plt.savefig(f"tmp/corr_with_nan.png"); plt.close()
 
+nan_codes = corr_matrix.index[np.isnan(corr_matrix.values.diagonal())]
+corr_matrix = corr_matrix.drop(index=nan_codes).drop(columns=nan_codes)
+plt.figure(figsize=(12, 10))
+sns.heatmap(corr_matrix, annot=False, fmt=".2f", cmap='coolwarm', vmin=-1, vmax=1)
+plt.title("Heatmap of Answer Correlations"); plt.savefig(f"tmp/corr_without_nan.png"); plt.close()
+
+plt.figure(figsize=(12, 10))
+sns.clustermap(corr_matrix, cmap='coolwarm', vmin=-1, vmax=1)
+plt.title("Structured Heatmap of Answer Correlations"); plt.savefig(f"tmp/corr_structured.png"); plt.close()
 ipdb.set_trace()
 
 # print(pyd.frac_future_is_observed)
