@@ -1,3 +1,7 @@
+wandb/
+tmp/
+outputs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -129,25 +133,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-wandb/
-medFMs/
-
-sbatch_logs/
-
-logfile
-
-tags
-
-docs/_collections/*
-docs/bin
-
-sample_data/processed/*
-
-outputs
-
-tmp_plots/
-tmp/
-plots/
-
-*.pkl
