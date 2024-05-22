@@ -1,5 +1,5 @@
 defaults:
-  # - pretrain_config
+  - pretrain_config
   - _self_
 
 do_overwrite: False
