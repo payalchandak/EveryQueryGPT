@@ -1,6 +1,0 @@
-detect_anomaly:
-  value: False
-log_every_n_steps:
-  value: 50
-strategy: 
-  value: ddp_find_unused_parameters_true
