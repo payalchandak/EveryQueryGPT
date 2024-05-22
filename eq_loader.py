@@ -34,14 +34,14 @@ TASK_NAME = "readmission_30d_all"
 PROJECT_DIR = Path(os.environ["PROJECT_DIR"])
 dataset_dir = f"/storage/shared/mgh-hf-dataset/processed/{COHORT_NAME}" # PROJECT_DIR / "data" / COHORT_NAME
 
-codes = EVAL_CODES[:5]
+codes = EVAL_CODES
 query_answers = {code['name']:[] for code in codes}
 for code in codes: 
     L.seed_everything(1)
     pyd_config = PytorchDatasetConfig(
         save_dir=dataset_dir,
         max_seq_len=256,
-        train_subset_size=0.001,
+        train_subset_size=0.01,
         train_subset_seed=79163,
         do_include_start_time_min=True,
         fixed_code_mode=True,
