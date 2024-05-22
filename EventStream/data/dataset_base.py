@@ -34,7 +34,6 @@ from .config import (
     VocabularyConfig,
 )
 from .types import DataModality, InputDataType, InputDFType, TemporalityType
-from .visualize import Visualizer
 from .vocabulary import Vocabulary
 
 INPUT_DF_T = TypeVar("INPUT_DF_T")
@@ -45,23 +44,6 @@ DF_T = TypeVar("DF_T")
 class DatasetBase(
     abc.ABC, Generic[DF_T, INPUT_DF_T], SeedableMixin, SaveableMixin, TimeableMixin, TQDMableMixin
 ):
-    """A unified base class for dataset objects using different processing libraries.
-
-    Args:
-        config: Configuration object for this dataset.
-        subjects_df: The dataframe containing all static, subject-level data. If this is specified,
-            `events_df` and `dynamic_measurements_df` should also be specified. Otherwise, this will be built
-            from source via the extraction pipeline defined in `input_schema`.
-        events_df:  The dataframe containing all event timestamps, types, and subject IDs. If this is
-            specified, `subjects_df` and `dynamic_measurements_df` should also be specified. Otherwise, this
-            will be built from source via the extraction pipeline defined in `input_schema`.
-        dynamic_measurements_df: The dataframe containing all time-varying measurement observations. If this
-            is specified, `subjects_df` and `events_df` should also be specified. Otherwise, this will be
-            built from source via the extraction pipeline defined in `input_schema`.
-        input_schema: The schema configuration object to define the extraction pipeline for pulling raw data
-            from source and produce the `subjects_df`, `events_df`, `dynamic_measurements_df` input view.
-    """
-
     _PICKLER: str = "dill"
     """Dictates via which pickler the `_save` and `_load` methods will save/load objects of this class, as
     defined in `SaveableMixin`."""
@@ -1507,7 +1489,6 @@ class DatasetBase(
     def describe(
         self,
         do_print_measurement_summaries: bool = True,
-        viz_config: Visualizer | None = None,
     ) -> list[Figure] | None:
         """Describes the dataset, both in language and in figures."""
         print(
@@ -1522,34 +1503,3 @@ class DatasetBase(
                     cfg.name = meas
                 cfg.describe(line_width=60)
                 print()
-
-        if viz_config is not None:
-            return self.visualize(viz_config)
-
-    def visualize(
-        self,
-        viz_config: Visualizer,
-    ) -> list[Figure]:
-        """Visualizes the dataset, along several axes."""
-
-        if viz_config.subset_size is not None:
-            viz_config.subset_random_seed = self._seed(seed=viz_config.subset_random_seed, key="visualize")
-
-        if viz_config.subset_size is not None:
-            subject_ids = list(np.random.choice(list(self.subject_ids), viz_config.subset_size))
-
-            subjects_df = self._filter_col_inclusion(self.subjects_df, {"subject_id": subject_ids})
-            events_df = self._filter_col_inclusion(self.events_df, {"subject_id": subject_ids})
-            dynamic_measurements_df = self._filter_col_inclusion(
-                self.dynamic_measurements_df, {"event_id": list(events_df["event_id"])}
-            )
-        else:
-            subjects_df = self.subjects_df
-            events_df = self.events_df
-            dynamic_measurements_df = self.dynamic_measurements_df
-
-        if viz_config.age_col is not None:
-            events_df = self._denormalize(events_df, viz_config.age_col)
-
-        figs = viz_config.plot(subjects_df, events_df, dynamic_measurements_df)
-        return figs
