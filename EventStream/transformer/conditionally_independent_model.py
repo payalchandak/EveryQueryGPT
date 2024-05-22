@@ -5,14 +5,6 @@ import torch
 
 from ..data.types import DataModality, PytorchBatch
 from .config import StructuredEventProcessingMode, StructuredTransformerConfig
-from .generation.generation_utils import StructuredGenerationMixin
-from .model_output import (
-    GenerativeOutputLayerBase,
-    GenerativeSequenceModelLabels,
-    GenerativeSequenceModelLosses,
-    GenerativeSequenceModelOutput,
-    GenerativeSequenceModelPredictions,
-)
 from ..data.data_embedding_layer import DataEmbeddingLayer
 from .transformer import (
     ConditionallyIndependentPointProcessTransformer,
