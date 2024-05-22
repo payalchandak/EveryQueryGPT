@@ -66,7 +66,7 @@ def dump_preditions(cfg: PretrainConfig, WANDB_RUN_ID:str, device:int=0):
     data_config = cfg.data_config
     config.set_to_dataset(train_pyd)
     optimization_config.set_to_dataset(train_pyd)
-    data_config.set_to_dataset(train_pyd)
+    # data_config.set_to_dataset(train_pyd)
 
     LM = ESTForGenerativeSequenceModelingLM(
         config=config,

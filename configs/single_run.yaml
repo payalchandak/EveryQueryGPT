@@ -54,9 +54,9 @@ data_config:
   min_offset_days: 0
   max_offset_days: 365
   fixed_code_mode: False 
-  fixed_code: 
-  fixed_time_mode: False 
-  fixed_time: 
+  fixed_code: #{'name': 'Hypertension','code':'Essential (primary) hypertension',}
+  fixed_time_mode: True 
+  fixed_time: {'offset':0, 'duration':365}
   population_rates:
 trainer_config:
   accelerator: auto
@@ -67,7 +67,7 @@ trainer_config:
   fast_dev_run: False
 experiment_dir: /storage/chandak/models/EveryQuery/
 wandb_logger_kwargs:
-  name: debug-answer-in-query-piece
+  name: random-query-1year
   entity: payal-collabs
   project: EveryQueryGPT
   team: null

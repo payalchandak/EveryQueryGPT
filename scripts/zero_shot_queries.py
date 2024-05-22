@@ -27,7 +27,7 @@ torch.set_float32_matmul_precision("high")
 
 @hydra.main(version_base=None, config_name="pretrain_config")
 def main(cfg: PretrainConfig):
-    WANDB_RUN_ID="vhjwx9p8"
+    WANDB_RUN_ID="j25wuxd4"
     hydra_loguru_init()
     if type(cfg) is not PretrainConfig:
         cfg = hydra.utils.instantiate(cfg, _convert_="object")
