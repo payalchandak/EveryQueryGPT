@@ -1,10 +1,8 @@
-import json, os 
-import pandas as pd
-import numpy as np 
-import yaml
+import json, os, pandas as pd, numpy as np, yaml
 from omegaconf import OmegaConf
 
 class Experiment:
+
     def __init__(self, dir, restart=False):
         self.dir = dir
         self.spec = self.load_spec()
@@ -40,7 +38,6 @@ class Experiment:
                     'wandb_run_id':None,
                     'training_initiated': False,
                     'training_finished': False,
-                    'zeroshot_initiated': False,
                     'zeroshot_finished': False,
                 }
                 rows.append(row)
@@ -77,7 +74,7 @@ class Experiment:
         current[keys[-1]] = value  
         return cfg
 
-    def train_commands(self, N=1, ignore_initiated=False): 
+    def pretrain_commands(self, N=1, ignore_initiated=False): 
         self.load_runs()
         commands = []
         for i in range(self.runs.shape[0]): 
@@ -95,9 +92,10 @@ class Experiment:
         commands = []
         for i in range(self.runs.shape[0]): 
             if not self.runs.loc[i,'training_finished']: continue 
-            cmd = None 
-            # (todo) need to mention wandb run id in source cmd 
-            # cmd = (f'source .env && PYTHONPATH="$EVENT_STREAM_PATH:$PYTHON PATH" python $EVENT_STREAM_PATH/scripts/pretrain.py --config-path=$(pwd)/configs --config-name={cfg_name} "hydra.searchpath=[$EVENT_STREAM_PATH/configs]"')
+            if self.runs.loc[i,'zeroshot_finished']: continue 
+            save_dir = self.runs.loc[i,'save_dir']
+            cfg_name = f"{self.spec['id']}_{i}.yaml"
+            cmd = f'source .env && PYTHONPATH="$EVENT_STREAM_PATH:$PYTHON PATH" python $EVENT_STREAM_PATH/scripts/zero_shot_queries.py --config-path=$(pwd)/configs --config-name={cfg_name} "hydra.searchpath=[$EVENT_STREAM_PATH/configs]" ++save_dir={save_dir}'
             commands.append(cmd)
             if len(commands)>= N: break
         [print(x) for x in commands]
@@ -112,6 +110,5 @@ exp = Experiment(
     dir='/storage2/payal/dropbox/private/EveryQueryGPT/experiments/num_hidden_layers/',
     restart=False,
 )
-
-exp.train_commands(N=2, ignore_initiated=True)
-# import ipdb; ipdb.set_trace()
+exp.pretrain_commands(N=2, ignore_initiated=True)
+exp.zeroshot_commands(N=2)
