@@ -1,6 +1,8 @@
 wandb/
 tmp/
 outputs/
+configs/[0-9]*
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

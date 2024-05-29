@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import lightning as L
 import omegaconf
 import torch
@@ -230,6 +231,14 @@ class PretrainConfig:
     do_overwrite: bool = False
     seed: int = 1
 
+    experiment: dict[str, Any] = dataclasses.field(
+        default_factory=lambda: {
+            "dir": "auto",
+            "id": "auto",
+            "run": "auto",
+        }
+    )
+
     config: dict[str, Any] = dataclasses.field(
         default_factory=lambda: {
             "_target_": "EventStream.transformer.config.StructuredTransformerConfig",
@@ -339,7 +348,12 @@ def train(cfg: PretrainConfig):
             logger.info(f"Writing to {config_fp}")
             config.to_json_file(config_fp)
 
-        data_config.to_json_file(cfg.save_dir / "data_config.json", do_overwrite=cfg.do_overwrite)
+        with open(cfg.save_dir / "experiment.json", 'w') as file:
+                file.write(json.dumps(cfg.experiment, indent=4))
+
+        data_config.to_json_file(
+            cfg.save_dir / "data_config.json", do_overwrite=cfg.do_overwrite
+        )
         optimization_config.to_json_file(
             cfg.save_dir / "optimization_config.json", do_overwrite=cfg.do_overwrite
         )
@@ -349,6 +363,12 @@ def train(cfg: PretrainConfig):
         cfg.final_validation_metrics_config.to_json_file(
             cfg.save_dir / "final_validation_metrics_config.json", do_overwrite=cfg.do_overwrite
         )
+
+        # mark run as initiated in experiment tracker 
+        runs = pd.read_csv(f'{cfg.experiment["dir"]}runs.csv')
+        assert runs.loc[0,'experiment_id'] == cfg.experiment['id']
+        runs.loc[cfg.experiment['run'],'training_initiated'] = True
+        runs.to_csv(f'{cfg.experiment["dir"]}runs.csv')
 
     LM = ESTForGenerativeSequenceModelingLM(
         config=config,
@@ -407,6 +427,7 @@ def train(cfg: PretrainConfig):
             if cfg.wandb_experiment_config_kwargs:
                 wandb_logger.experiment.config.update(cfg.wandb_experiment_config_kwargs)
 
+
         trainer_kwargs["logger"] = wandb_logger
 
     if (optimization_config.gradient_accumulation is not None) and (
@@ -444,22 +465,12 @@ def train(cfg: PretrainConfig):
             with open(cfg.save_dir / "held_out_metrics.json", mode="w") as f:
                 json.dump(held_out_metrics, f)
 
-        # data_config.fixed_code_mode = True 
-        # data_config.fixed_time_mode = True 
-        # for t in EVAL_TIMES: 
-        #     data_config.fixed_time = t
-        #     for c in EVAL_CODES:
-        #         data_config.fixed_code = c
-        #         held_out_pyd = PytorchDataset(data_config, split="held_out")
-        #         held_out_dataloader = torch.utils.data.DataLoader(
-        #             held_out_pyd,
-        #             batch_size=optimization_config.validation_batch_size,
-        #             num_workers=optimization_config.num_dataloader_workers,
-        #             collate_fn=held_out_pyd.collate,
-        #             shuffle=False,
-        #         )
-        #         LM.static_query_prefix = f"{c['name']} ({t['offset']}–{t['duration']+t['offset']})"
-        #         trainer.test(model=LM, dataloaders=held_out_dataloader)
+            # mark run as finished in experiment tracker, with save_dir and wandb run id
+            runs = pd.read_csv(f'{cfg.experiment["dir"]}runs.csv')
+            runs.loc[cfg.experiment['run'],'training_finished'] = True
+            runs.loc[cfg.experiment['run'],'save_dir'] = cfg.save_dir
+            runs.loc[cfg.experiment['run'],'wandb_run_id'] = wandb_logger.experiment.id
+            runs.to_csv(f'{cfg.experiment["dir"]}runs.csv')
 
         return tuning_metrics[0]["tuning/loss"], tuning_metrics, held_out_metrics
 

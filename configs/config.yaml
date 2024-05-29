@@ -4,6 +4,10 @@ defaults:
 
 do_overwrite: False
 seed: 1
+experiment: 
+  dir:
+  id: 
+  run: 
 config:
   do_use_learnable_sinusoidal_ATE: false
   do_split_embeddings: true
@@ -67,7 +71,7 @@ trainer_config:
   fast_dev_run: False
 experiment_dir: /storage/chandak/models/EveryQuery/
 wandb_logger_kwargs:
-  name: random-query-1year
+  name: test
   entity: payal-collabs
   project: EveryQueryGPT
   team: null
